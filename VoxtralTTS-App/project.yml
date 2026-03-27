@@ -52,3 +52,27 @@ targets:
         product: MLXRandom
       - package: swift-transformers
         product: Transformers
+
+  VoxtralTTSTests:
+    type: bundle.unit-test
+    platform: [macOS]
+    sources:
+      - path: VoxtralTTSTests
+      - path: VoxtralTTS/Sources
+        excludes:
+          - "App/VoxtralTTSApp.swift"
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - package: mlx-swift
+        product: MLX
+      - package: mlx-swift
+        product: MLXFast
+      - package: mlx-swift
+        product: MLXNN
+      - package: mlx-swift
+        product: MLXRandom
+      - package: swift-transformers
+        product: Transformers

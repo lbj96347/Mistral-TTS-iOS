@@ -7,49 +7,74 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0506F23E03111918618E42B5 /* GenerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AC24A7168B711BB1CA785A /* GenerationTests.swift */; };
 		07DEAE1078A65E860DF91532 /* AcousticTransformer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */; };
+		0DE9623EA43E999E1E019E0D /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = 9E2CB5B90B55A0F4F47E00E4 /* MLXNN */; };
+		20E8716F68F5F5A7E56550DE /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = BB184364F623BDD4AC8FA1EC /* MLXFast */; };
+		27400A7D2369AB747A9892F0 /* AcousticTransformer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */; };
+		27CD70FEC268DBEBFED4F5A4 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = CE8350BDF21E06B78A063D1A /* Transformers */; };
 		320374C74705929DA51D87A1 /* VoxtralTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */; };
+		3217DFE8679E22A9B5531B7A /* ModelLoadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43ED34E268D9F27366F59ACE /* ModelLoadingTests.swift */; };
 		3555DFF388FECF39232F7A5E /* VoxtralModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */; };
 		3F04A41686AF04FD50217466 /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 263BE8632366C3D85DEF66FD /* TTSViewModel.swift */; };
+		4344E90637812F02CA700113 /* VoxtralModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */; };
 		46E6BD510DDA5ACE726B2DC4 /* TransformerDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */; };
 		515A547C1D517284D388F65C /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = 1D0472135DFCA973A3B5193B /* MLXNN */; };
 		53F5C871AD486258F265CEC8 /* ModelConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DB179F3581788C00E152C /* ModelConfig.swift */; };
 		550A40A6B69746A0DC532DC3 /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = 8FCBFB5A86A048498E9EC174 /* MLXRandom */; };
+		5697C174FC0BE7DF84890831 /* AudioPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE003B0E5FFD3F5A9B903E3 /* AudioPlayerTests.swift */; };
 		56C1DBB1B493F10C666D80D8 /* VoxtralModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */; };
 		76815FD0F2C13CF40DCA3DAF /* VoxtralTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */; };
 		7D062B2C1F54E0B618557265 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 61184A4D92628DC2196F1D45 /* MLX */; };
 		7D730BE07D751065E555815F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F321BA304B97C38F813A9015 /* ContentView.swift */; };
 		8240DAA1A8FDA7C13E1A6346 /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = 725CACE4E1AC2C3B49839DDB /* MLXFast */; };
 		89277B852A76D54B7519B609 /* TransformerDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */; };
+		8CADADD07924DB23C60B20AF /* TransformerDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */; };
 		8E76EAD5288DF18B0012F44F /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 1CF1BC95EC4E995A96A6A2DB /* MLX */; };
+		904152CD49A2CEEA2A922F17 /* VoxtralCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */; };
+		929F3171C8967B3037A58949 /* ModelConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DB179F3581788C00E152C /* ModelConfig.swift */; };
 		945E1EC0E3B04D08463DD5F7 /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = 42A459CE962B19823AC67B56 /* MLXNN */; };
 		9A1780E9A79B6B7B07A7BD47 /* AcousticTransformer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */; };
 		9A9901CE1DE88DA562637713 /* ModelConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DB179F3581788C00E152C /* ModelConfig.swift */; };
+		9C7D9AD18DBB770E47ACC1E9 /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = 9646EA4E47E36CA4BD300A40 /* MLXRandom */; };
 		A8AA37110B3F364A04230FC0 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
 		B1E1B97938EF80458CB169A7 /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = 81A37C52DA0679381D82AD14 /* MLXFast */; };
+		B4329CC6425076E78D10AAF4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F321BA304B97C38F813A9015 /* ContentView.swift */; };
 		B99110296E5AFFB9F0970C9F /* VoxtralCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */; };
 		BB9E64EFB6AD105948F56F19 /* VoxtralTTSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4ACC51DB12CE198B41B63C6 /* VoxtralTTSApp.swift */; };
+		BF6E1119564C84F4B3AE042F /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 33C729D36BD42C573AA963C9 /* MLX */; };
 		C1FFEA7C75377EB9B195B061 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = FAD636D6CF881FD47CFA4A9D /* Transformers */; };
 		C2162D5D91DA50B4B061CBDA /* VoxtralTTSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4ACC51DB12CE198B41B63C6 /* VoxtralTTSApp.swift */; };
 		CBC3A7DB542A007B5BF6D4FE /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 263BE8632366C3D85DEF66FD /* TTSViewModel.swift */; };
 		D1CEB222F4F89E58E6F0ED51 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F321BA304B97C38F813A9015 /* ContentView.swift */; };
+		D3DBD6870E414157D283D9ED /* TokenizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F246CA6A4A84DA800256F8AF /* TokenizerTests.swift */; };
 		D9A7238486CC567E63FACDF0 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = 51C20A1688FEC8C7274E5409 /* Transformers */; };
+		D9AB5232D20C483A5FAAD37E /* VoxtralTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */; };
 		E5D771FD1F76E643D48636C1 /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = E79FA27C0F08401DDDDB9A67 /* MLXRandom */; };
 		E8234CD74E450AC00FEEFBA6 /* VoxtralCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */; };
+		E86A29AAC87E2470B2A3535F /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 263BE8632366C3D85DEF66FD /* TTSViewModel.swift */; };
 		F01BDD0B950E1E07642E134F /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
+		F2785F37BF9AF1CA4E48ED18 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */; };
+		F8F5EB474FF9C1348AC0BFB2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformerDecoder.swift; sourceTree = "<group>"; };
 		263BE8632366C3D85DEF66FD /* TTSViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSViewModel.swift; sourceTree = "<group>"; };
+		43ED34E268D9F27366F59ACE /* ModelLoadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLoadingTests.swift; sourceTree = "<group>"; };
 		4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralTokenizer.swift; sourceTree = "<group>"; };
 		5A2DB179F3581788C00E152C /* ModelConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfig.swift; sourceTree = "<group>"; };
+		7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
 		7E8E3F5F5F4D8330514AF4A9 /* VoxtralTTS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8EE003B0E5FFD3F5A9B903E3 /* AudioPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerTests.swift; sourceTree = "<group>"; };
 		8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcousticTransformer.swift; sourceTree = "<group>"; };
 		AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralModel.swift; sourceTree = "<group>"; };
+		B626AC1C3B8B851A5962D325 /* VoxtralTTSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoxtralTTSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralCodec.swift; sourceTree = "<group>"; };
 		E305F946F54B6DB6361939FE /* VoxtralTTS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0AC24A7168B711BB1CA785A /* GenerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationTests.swift; sourceTree = "<group>"; };
+		F246CA6A4A84DA800256F8AF /* TokenizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenizerTests.swift; sourceTree = "<group>"; };
 		F321BA304B97C38F813A9015 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F4ACC51DB12CE198B41B63C6 /* VoxtralTTSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralTTSApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -64,6 +89,18 @@
 				945E1EC0E3B04D08463DD5F7 /* MLXNN in Frameworks */,
 				E5D771FD1F76E643D48636C1 /* MLXRandom in Frameworks */,
 				D9A7238486CC567E63FACDF0 /* Transformers in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5FFED6CF749116E91D2670E0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF6E1119564C84F4B3AE042F /* MLX in Frameworks */,
+				20E8716F68F5F5A7E56550DE /* MLXFast in Frameworks */,
+				0DE9623EA43E999E1E019E0D /* MLXNN in Frameworks */,
+				9C7D9AD18DBB770E47ACC1E9 /* MLXRandom in Frameworks */,
+				27CD70FEC268DBEBFED4F5A4 /* Transformers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,6 +144,7 @@
 			isa = PBXGroup;
 			children = (
 				7E61868EAB03E4ED25DE64B6 /* Sources */,
+				A610622B391FEE777999FBD8 /* VoxtralTTSTests */,
 				C757200BC94194AFBD106C94 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -124,6 +162,18 @@
 			path = VoxtralTTS/Sources;
 			sourceTree = "<group>";
 		};
+		A610622B391FEE777999FBD8 /* VoxtralTTSTests */ = {
+			isa = PBXGroup;
+			children = (
+				8EE003B0E5FFD3F5A9B903E3 /* AudioPlayerTests.swift */,
+				F0AC24A7168B711BB1CA785A /* GenerationTests.swift */,
+				43ED34E268D9F27366F59ACE /* ModelLoadingTests.swift */,
+				7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */,
+				F246CA6A4A84DA800256F8AF /* TokenizerTests.swift */,
+			);
+			path = VoxtralTTSTests;
+			sourceTree = "<group>";
+		};
 		BAC2F6F217279E79634C690A /* Tokenizer */ = {
 			isa = PBXGroup;
 			children = (
@@ -137,6 +187,7 @@
 			children = (
 				7E8E3F5F5F4D8330514AF4A9 /* VoxtralTTS.app */,
 				E305F946F54B6DB6361939FE /* VoxtralTTS.app */,
+				B626AC1C3B8B851A5962D325 /* VoxtralTTSTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -160,6 +211,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		69B1006D5FE246B98ADDAA7D /* VoxtralTTSTests_macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1E57A697AC50A538D171E4AB /* Build configuration list for PBXNativeTarget "VoxtralTTSTests_macOS" */;
+			buildPhases = (
+				7985725614981EA4CE10072A /* Sources */,
+				5FFED6CF749116E91D2670E0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VoxtralTTSTests_macOS;
+			packageProductDependencies = (
+				33C729D36BD42C573AA963C9 /* MLX */,
+				BB184364F623BDD4AC8FA1EC /* MLXFast */,
+				9E2CB5B90B55A0F4F47E00E4 /* MLXNN */,
+				9646EA4E47E36CA4BD300A40 /* MLXRandom */,
+				CE8350BDF21E06B78A063D1A /* Transformers */,
+			);
+			productName = VoxtralTTSTests_macOS;
+			productReference = B626AC1C3B8B851A5962D325 /* VoxtralTTSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		9792F8926569C30C7D3ACB08 /* VoxtralTTS_iOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1524035EB01F1B197D779CDD /* Build configuration list for PBXNativeTarget "VoxtralTTS_iOS" */;
@@ -241,6 +315,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				69B1006D5FE246B98ADDAA7D /* VoxtralTTSTests_macOS */,
 				9792F8926569C30C7D3ACB08 /* VoxtralTTS_iOS */,
 				BAF805AD58316561CD42A849 /* VoxtralTTS_macOS */,
 			);
@@ -265,6 +340,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7985725614981EA4CE10072A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				27400A7D2369AB747A9892F0 /* AcousticTransformer.swift in Sources */,
+				F8F5EB474FF9C1348AC0BFB2 /* AudioPlayer.swift in Sources */,
+				5697C174FC0BE7DF84890831 /* AudioPlayerTests.swift in Sources */,
+				B4329CC6425076E78D10AAF4 /* ContentView.swift in Sources */,
+				0506F23E03111918618E42B5 /* GenerationTests.swift in Sources */,
+				929F3171C8967B3037A58949 /* ModelConfig.swift in Sources */,
+				3217DFE8679E22A9B5531B7A /* ModelLoadingTests.swift in Sources */,
+				E86A29AAC87E2470B2A3535F /* TTSViewModel.swift in Sources */,
+				F2785F37BF9AF1CA4E48ED18 /* TestHelpers.swift in Sources */,
+				D3DBD6870E414157D283D9ED /* TokenizerTests.swift in Sources */,
+				8CADADD07924DB23C60B20AF /* TransformerDecoder.swift in Sources */,
+				904152CD49A2CEEA2A922F17 /* VoxtralCodec.swift in Sources */,
+				4344E90637812F02CA700113 /* VoxtralModel.swift in Sources */,
+				D9AB5232D20C483A5FAAD37E /* VoxtralTokenizer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E3539747B3EF88CCBD6D629A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -285,6 +381,24 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		326BEB03BCF72E3968199385 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.voxtral.VoxtralTTSTests-macOS";
+				PRODUCT_NAME = VoxtralTTSTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
 		330B3DCE437F2FD6796CBB4A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -362,6 +476,24 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3D0573B50F6CD6B5AB4FDF1E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.voxtral.VoxtralTTSTests-macOS";
+				PRODUCT_NAME = VoxtralTTSTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
 		};
@@ -514,6 +646,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		1E57A697AC50A538D171E4AB /* Build configuration list for PBXNativeTarget "VoxtralTTSTests_macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				326BEB03BCF72E3968199385 /* Debug */,
+				3D0573B50F6CD6B5AB4FDF1E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		2B3262D96E4BB12253ED9C99 /* Build configuration list for PBXProject "VoxtralTTS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -564,6 +705,11 @@
 			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLXNN;
 		};
+		33C729D36BD42C573AA963C9 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
 		42A459CE962B19823AC67B56 /* MLXNN */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
@@ -593,6 +739,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLXRandom;
+		};
+		9646EA4E47E36CA4BD300A40 /* MLXRandom */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXRandom;
+		};
+		9E2CB5B90B55A0F4F47E00E4 /* MLXNN */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXNN;
+		};
+		BB184364F623BDD4AC8FA1EC /* MLXFast */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXFast;
+		};
+		CE8350BDF21E06B78A063D1A /* Transformers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 58D7FF7F631D3070C93DE297 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Transformers;
 		};
 		E79FA27C0F08401DDDDB9A67 /* MLXRandom */ = {
 			isa = XCSwiftPackageProductDependency;

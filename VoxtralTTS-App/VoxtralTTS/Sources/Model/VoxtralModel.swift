@@ -129,15 +129,19 @@ class VoxtralTTSModel: Module {
             let expanded = voiceEmb.ndim == 2
                 ? voiceEmb.expandedDimensions(axis: 0)
                 : voiceEmb
+            print("[TTS-Gen] Voice embedding shape: \(expanded.shape)")
             let result = languageModel(tokens: nil, cache: nil, inputEmbeds: expanded)
             cache = result.newCache
+            print("[TTS-Gen] Voice conditioning done, cache established")
         }
 
         // Process text tokens
+        print("[TTS-Gen] Processing text tokens shape: \(tokenIds.shape), cache: \(cache != nil)")
         var result = languageModel(tokens: tokenIds, cache: cache)
         var logits = result.logits
         var hiddenStates = result.hiddenStates
         cache = result.newCache
+        print("[TTS-Gen] Text forward done — logits: \(logits.shape), hidden: \(hiddenStates.shape)")
 
         // Autoregressive audio generation
         var allSemanticCodes: [MLXArray] = []
@@ -150,16 +154,21 @@ class VoxtralTTSModel: Module {
 
             // Check end-of-audio
             let endToken = MLXArray(Int32(audioConfig.audioTokenId + END_AUDIO_ID))
+            print("[TTS-Gen] Frame \(frameIdx): evaluating semToken...")
             if MLX.any(semToken .== endToken).item(Bool.self) {
+                print("[TTS-Gen] End-of-audio token detected")
                 break
             }
+            print("[TTS-Gen] Frame \(frameIdx): semToken sampled")
 
             // Map to semantic codebook index
             let semCode = semToken - Int32(audioConfig.audioTokenId + AUDIO_CODE_OFFSET)
 
             // Stage 2: Flow matching for acoustic codes
             let lastHidden = hiddenStates[0..., -1, 0...]
+            print("[TTS-Gen] Frame \(frameIdx): lastHidden shape: \(lastHidden.shape), calling acoustic transformer...")
             let acouCode = acousticTransformer.decodeOneFrame(llmHidden: lastHidden)
+            print("[TTS-Gen] Frame \(frameIdx): acoustic codes generated")
 
             allSemanticCodes.append(semCode)
             allAcousticCodes.append(acouCode)
@@ -167,12 +176,14 @@ class VoxtralTTSModel: Module {
             // Encode audio frame back to embedding
             let audioEmb = encodeAudioFrame(semanticCode: semCode, acousticCodes: acouCode)
             let audioEmbExpanded = audioEmb.expandedDimensions(axis: 1)
+            print("[TTS-Gen] Frame \(frameIdx): audioEmb shape: \(audioEmbExpanded.shape)")
 
             // Feed back to LLM
             result = languageModel(tokens: nil, cache: cache, inputEmbeds: audioEmbExpanded)
             logits = result.logits
             hiddenStates = result.hiddenStates
             cache = result.newCache
+            print("[TTS-Gen] Frame \(frameIdx): LLM step done")
 
             eval(semCode, acouCode)
 
@@ -245,15 +256,49 @@ func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConf
     // Handle quantization - replace compatible Linear layers with QuantizedLinear
     if let quantConfig = config.quantization {
         print("[TTS-Model] Applying quantization: bits=\(quantConfig.bits), groupSize=\(quantConfig.groupSize)")
-        QuantizedLinear.quantize(
-            model: model,
+        // Quantize language model and acoustic transformer (not codec — its
+        // decoder_blocks heterogeneous array is incompatible with quantize's update)
+        quantize(
+            model: model.languageModel,
             groupSize: quantConfig.groupSize,
             bits: quantConfig.bits,
-            predicate: { linear in
-                let shape = linear.weight.shape
-                let lastDim = shape[shape.count - 1]
-                let minDim = shape.min() ?? 0
-                return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
+            filter: { _, module in
+                if let linear = module as? Linear {
+                    let shape = linear.weight.shape
+                    let lastDim = shape[shape.count - 1]
+                    let minDim = shape.min() ?? 0
+                    return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
+                } else if let embedding = module as? Embedding {
+                    let (_, dims) = embedding.shape
+                    return dims % quantConfig.groupSize == 0 && dims > quantConfig.groupSize
+                }
+                return false
+            }
+        )
+        quantize(
+            model: model.acousticTransformer,
+            groupSize: quantConfig.groupSize,
+            bits: quantConfig.bits,
+            filter: { _, module in
+                if let linear = module as? Linear {
+                    let shape = linear.weight.shape
+                    let lastDim = shape[shape.count - 1]
+                    let minDim = shape.min() ?? 0
+                    return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
+                }
+                return false
+            }
+        )
+        quantize(
+            model: model.audioTokenEmbedding,
+            groupSize: quantConfig.groupSize,
+            bits: quantConfig.bits,
+            filter: { _, module in
+                if let embedding = module as? Embedding {
+                    let (_, dims) = embedding.shape
+                    return dims % quantConfig.groupSize == 0 && dims > quantConfig.groupSize
+                }
+                return false
             }
         )
         print("[TTS-Model] Quantization applied")
