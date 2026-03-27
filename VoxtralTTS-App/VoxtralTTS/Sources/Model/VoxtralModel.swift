@@ -227,14 +227,24 @@ class AudioTokenEmbeddingContainer: Module {
 func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConfig) {
     // Load config
     let configURL = modelPath.appendingPathComponent("config.json")
+    print("[TTS-Model] Loading config from: \(configURL.path)")
     let configData = try Data(contentsOf: configURL)
     let config = try JSONDecoder().decode(ModelConfig.self, from: configData)
+    print("[TTS-Model] Config loaded — dim=\(config.dim), nLayers=\(config.nLayers), nHeads=\(config.nHeads), vocabSize=\(config.vocabSize)")
+    if let q = config.quantization {
+        print("[TTS-Model] Quantization: bits=\(q.bits), groupSize=\(q.groupSize)")
+    } else {
+        print("[TTS-Model] No quantization configured")
+    }
 
     // Instantiate model
+    print("[TTS-Model] Instantiating VoxtralTTSModel...")
     let model = VoxtralTTSModel(config: config)
+    print("[TTS-Model] Model instantiated")
 
     // Handle quantization - replace compatible Linear layers with QuantizedLinear
     if let quantConfig = config.quantization {
+        print("[TTS-Model] Applying quantization: bits=\(quantConfig.bits), groupSize=\(quantConfig.groupSize)")
         QuantizedLinear.quantize(
             model: model,
             groupSize: quantConfig.groupSize,
@@ -246,6 +256,7 @@ func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConf
                 return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
             }
         )
+        print("[TTS-Model] Quantization applied")
     }
 
     // Load weights from safetensors
@@ -254,17 +265,37 @@ func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConf
     let weightFiles = contents.filter { $0.pathExtension == "safetensors" }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
+    print("[TTS-Model] Found \(weightFiles.count) safetensors file(s)")
+
     var allWeights = [String: MLXArray]()
     for weightFile in weightFiles {
+        print("[TTS-Model] Loading weights from: \(weightFile.lastPathComponent)")
+        let loadStart = CFAbsoluteTimeGetCurrent()
         let weights = try MLX.loadArrays(url: weightFile)
+        let loadElapsed = CFAbsoluteTimeGetCurrent() - loadStart
+        print("[TTS-Model]   → \(weights.count) tensors loaded in \(String(format: "%.2f", loadElapsed))s")
         for (key, value) in weights {
             allWeights[key] = value
         }
     }
 
+    print("[TTS-Model] Total tensors: \(allWeights.count)")
+
+    // Log a sample of weight keys for debugging
+    let sampleKeys = allWeights.keys.sorted().prefix(10)
+    for key in sampleKeys {
+        if let arr = allWeights[key] {
+            print("[TTS-Model]   key: \(key) shape=\(arr.shape)")
+        }
+    }
+
     // Convert flat dict to nested ModuleParameters and load
+    print("[TTS-Model] Applying weights to model...")
+    let applyStart = CFAbsoluteTimeGetCurrent()
     let parameters = toModuleParameters(allWeights)
-    model.update(parameters: parameters)
+    try model.update(parameters: parameters, verify: .none)
+    let applyElapsed = CFAbsoluteTimeGetCurrent() - applyStart
+    print("[TTS-Model] Weights applied in \(String(format: "%.2f", applyElapsed))s")
 
     return (model, config)
 }
@@ -277,6 +308,8 @@ func toModuleParameters(_ flat: [String: MLXArray]) -> ModuleParameters {
         let parts = key.split(separator: ".").map(String.init)
         insertNested(&result, keys: parts, value: value)
     }
+    // Convert numeric-keyed dictionaries to arrays (e.g., layers.0, layers.1 → [layer0, layer1])
+    convertNumericKeysToArrays(&result)
     return result
 }
 
@@ -296,4 +329,28 @@ private func insertNested(_ dict: inout ModuleParameters, keys: [String], value:
     }
     insertNested(&nested, keys: Array(keys.dropFirst()), value: value)
     dict[first] = nested.asItem()
+}
+
+private func convertNumericKeysToArrays(_ params: inout ModuleParameters) {
+    for key in params.keys {
+        guard case .dictionary(let nested) = params[key] else { continue }
+
+        // Recursively convert children first
+        var nestedParams = ModuleParameters(values: nested)
+        convertNumericKeysToArrays(&nestedParams)
+
+        // Check if all keys are consecutive integers starting from 0
+        let allNumeric = nestedParams.keys.allSatisfy { Int($0) != nil }
+        if allNumeric && !nestedParams.keys.isEmpty {
+            let sorted = nestedParams.keys.sorted { Int($0)! < Int($1)! }
+            let isConsecutive = sorted.enumerated().allSatisfy { $0.offset == Int($0.element)! }
+            if isConsecutive {
+                let array = sorted.map { nestedParams[$0]! }
+                params[key] = .array(array)
+                continue
+            }
+        }
+
+        params[key] = nestedParams.asItem()
+    }
 }

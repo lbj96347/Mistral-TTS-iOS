@@ -16,9 +16,11 @@ hf_model/
 mlx_model/
 mlx_model_q4/
 
-# Swift
+# Swift / Xcode
 VoxtralTTS/.build/
 VoxtralTTS/.swiftpm/
+DerivedData/
+*.xcuserstate
 
 # IDE
 .vscode/

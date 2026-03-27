@@ -25,8 +25,6 @@ targets:
       - path: VoxtralTTS/Resources
     info:
       path: VoxtralTTS/Info.plist
-    entitlements:
-      path: VoxtralTTS/VoxtralTTS.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.voxtral.tts
@@ -39,8 +37,10 @@ targets:
       configs:
         Debug:
           SWIFT_OPTIMIZATION_LEVEL: -Onone
+          CODE_SIGN_ENTITLEMENTS: VoxtralTTS/VoxtralTTS.debug.entitlements
         Release:
           SWIFT_OPTIMIZATION_LEVEL: -O
+          CODE_SIGN_ENTITLEMENTS: VoxtralTTS/VoxtralTTS.entitlements
     dependencies:
       - package: mlx-swift
         product: MLX

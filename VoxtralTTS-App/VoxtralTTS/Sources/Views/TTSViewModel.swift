@@ -53,23 +53,48 @@ class TTSViewModel: ObservableObject {
         return audioPlayer.currentTime / audioPlayer.duration
     }
 
+    // MARK: - Auto-Load from Launch Argument
+
+    func checkAutoLoadArgument() {
+        let args = ProcessInfo.processInfo.arguments
+        if let idx = args.firstIndex(of: "--model-path"), idx + 1 < args.count {
+            let path = args[idx + 1]
+            print("[TTS] Auto-loading model from launch argument: \(path)")
+            let url = URL(fileURLWithPath: path)
+            loadModel(from: url)
+        }
+    }
+
     // MARK: - Model Loading
 
     func loadModel(from url: URL) {
         isLoadingModel = true
         errorMessage = nil
         loadingStatus = "Loading config..."
+        print("[TTS] loadModel called with path: \(url.path)")
 
         // Start security-scoped access for sandboxed apps
         let accessing = url.startAccessingSecurityScopedResource()
+        print("[TTS] Security-scoped access: \(accessing)")
 
         Task {
+            let startTime = CFAbsoluteTimeGetCurrent()
             do {
                 loadingStatus = "Loading config..."
+                print("[TTS] Loading model config and weights...")
                 let (loadedModel, config) = try loadVoxtralModel(from: url)
+                let modelElapsed = CFAbsoluteTimeGetCurrent() - startTime
+                print("[TTS] Model loaded in \(String(format: "%.2f", modelElapsed))s — dim=\(config.dim), layers=\(config.nLayers)")
 
                 loadingStatus = "Loading tokenizer..."
+                print("[TTS] Loading tokenizer...")
+                let tokenizerStart = CFAbsoluteTimeGetCurrent()
                 let loadedTokenizer = try await VoxtralTokenizer(modelPath: url)
+                let tokenizerElapsed = CFAbsoluteTimeGetCurrent() - tokenizerStart
+                print("[TTS] Tokenizer loaded in \(String(format: "%.2f", tokenizerElapsed))s")
+
+                let totalElapsed = CFAbsoluteTimeGetCurrent() - startTime
+                print("[TTS] ✅ Total load time: \(String(format: "%.2f", totalElapsed))s")
 
                 await MainActor.run {
                     self.model = loadedModel
@@ -83,6 +108,8 @@ class TTSViewModel: ObservableObject {
                     UserDefaults.standard.set(url.path, forKey: modelPathKey)
                 }
             } catch {
+                print("[TTS] ❌ Failed to load model: \(error.localizedDescription)")
+                print("[TTS] ❌ Full error: \(error)")
                 await MainActor.run {
                     self.errorMessage = "Failed to load model: \(error.localizedDescription)"
                     self.isLoadingModel = false

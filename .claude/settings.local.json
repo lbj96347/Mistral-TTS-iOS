@@ -7,7 +7,10 @@
       "Bash(cp VoxtralTTS/Sources/VoxtralTTS/Model/*.swift VoxtralTTS-App/VoxtralTTS/Sources/Model/)",
       "Bash(cp VoxtralTTS/Sources/VoxtralTTS/Tokenizer/*.swift VoxtralTTS-App/VoxtralTTS/Sources/Tokenizer/)",
       "Bash(xcodegen generate:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Bash(find /Users/CashMacbook/Documents/project/Mistral-TTS-iOS/VoxtralTTS-App -name \"*.swift\" -exec wc -l {} +)",
+      "Bash(python3 -c \"import json; t=json.load\\(open\\(''''/Users/CashMacbook/Documents/project/Mistral-TTS-iOS/mlx_model_q4/tokenizer.json''''\\)\\); print\\(type\\(t\\)\\); print\\(list\\(t.keys\\(\\)\\)[:10]\\)\")",
+      "Bash(python3:*)"
     ]
   }
 }
