@@ -194,22 +194,25 @@ class CodecAttention: Module {
         self._wo.wrappedValue = Linear(nHeads * headDim, dim, bias: false)
 
         if qkNorm {
-            self._qNorm.wrappedValue = RMSNorm(dimensions: headDim, eps: qkNormEps)
-            self._kNorm.wrappedValue = RMSNorm(dimensions: headDim, eps: qkNormEps)
+            self._qNorm.wrappedValue = RMSNorm(dimensions: nHeads * headDim, eps: qkNormEps)
+            self._kNorm.wrappedValue = RMSNorm(dimensions: nKvHeads * headDim, eps: qkNormEps)
         }
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
         let B = x.dim(0), T = x.dim(1)
 
-        var q = wq(x).reshaped(B, T, nHeads, headDim)
-        var k = wk(x).reshaped(B, T, nKvHeads, headDim)
-        var v = wv(x).reshaped(B, T, nKvHeads, headDim)
+        var qProj = wq(x)
+        var kProj = wk(x)
 
         if useQkNorm, let qn = qNorm, let kn = kNorm {
-            q = qn(q)
-            k = kn(k)
+            qProj = qn(qProj)
+            kProj = kn(kProj)
         }
+
+        let q = qProj.reshaped(B, T, nHeads, headDim)
+        var k = kProj.reshaped(B, T, nKvHeads, headDim)
+        var v = wv(x).reshaped(B, T, nKvHeads, headDim)
 
         if nRep > 1 {
             k = repeatKv(k, nRep: nRep)

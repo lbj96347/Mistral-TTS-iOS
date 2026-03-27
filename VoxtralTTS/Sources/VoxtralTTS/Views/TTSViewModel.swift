@@ -25,6 +25,9 @@ class TTSViewModel: ObservableObject {
     private var modelConfig: ModelConfig?
     private var modelPath: URL?
 
+    // Generation task (for cancellation)
+    private var generationTask: Task<Void, Never>?
+
     // Audio
     let audioPlayer = AudioPlayer(sampleRate: 24000)
 
@@ -95,19 +98,36 @@ class TTSViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Frame Estimation
+
+    private func estimateMaxFrames(for text: String) -> Int {
+        let wordCount = text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        let estimated = wordCount * 15
+        return min(max(estimated, 50), 2048)
+    }
+
+    // MARK: - Cancel
+
+    func cancelGeneration() {
+        generationTask?.cancel()
+    }
+
     // MARK: - Generation
 
     func generate() {
         guard let model = model, let tokenizer = tokenizer else { return }
         guard !inputText.isEmpty else { return }
 
+        let estimatedFrames = estimateMaxFrames(for: inputText)
+
         isGenerating = true
         errorMessage = nil
         generationProgress = 0
         currentFrame = 0
+        maxFrames = estimatedFrames
         generationStats = nil
 
-        Task.detached { [weak self, inputText, selectedVoice] in
+        generationTask = Task.detached { [weak self, inputText, selectedVoice, estimatedFrames] in
             guard let self = self else { return }
 
             do {
@@ -132,13 +152,16 @@ class TTSViewModel: ObservableObject {
                     voiceEmbedding: voiceEmb,
                     temperature: 0.0,
                     topP: 1.0,
-                    maxAudioFrames: 2048,
+                    maxAudioFrames: estimatedFrames,
                     progressCallback: { frame, total in
                         Task { @MainActor in
                             self.currentFrame = frame
                             self.maxFrames = total
                             self.generationProgress = Double(frame) / Double(total)
                         }
+                    },
+                    shouldCancel: {
+                        Task.isCancelled
                     }
                 )
 

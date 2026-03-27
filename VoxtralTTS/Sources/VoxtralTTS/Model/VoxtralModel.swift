@@ -115,7 +115,8 @@ class VoxtralTTSModel: Module {
         temperature: Float = 0.0,
         topP: Float = 1.0,
         maxAudioFrames: Int = 2048,
-        progressCallback: ((Int, Int) -> Void)? = nil
+        progressCallback: ((Int, Int) -> Void)? = nil,
+        shouldCancel: (() -> Bool)? = nil
     ) -> GenerationResult? {
         let startTime = CFAbsoluteTimeGetCurrent()
         let audioConfig = config.audioConfig
@@ -144,6 +145,11 @@ class VoxtralTTSModel: Module {
         var allAcousticCodes: [MLXArray] = []
 
         for frameIdx in 0 ..< maxAudioFrames {
+            // Check cancellation
+            if shouldCancel?() == true {
+                break
+            }
+
             // Sample semantic token from LLM
             let lastLogits = logits[0..., -1, 0...]
             let semToken = sampleToken(lastLogits, temperature: temperature, topP: topP)

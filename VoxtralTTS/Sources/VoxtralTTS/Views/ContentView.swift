@@ -145,13 +145,21 @@ struct ContentView: View {
             .buttonStyle(.borderedProminent)
             .disabled(viewModel.inputText.isEmpty || viewModel.isGenerating)
 
-            // Progress
+            // Progress + Cancel
             if viewModel.isGenerating {
                 VStack(spacing: 4) {
                     ProgressView(value: viewModel.generationProgress)
-                    Text("Frame \(viewModel.currentFrame) / \(viewModel.maxFrames)")
+                    HStack {
+                        Text("Frame \(viewModel.currentFrame) / \(viewModel.maxFrames)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Cancel") {
+                            viewModel.cancelGeneration()
+                        }
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.red)
+                    }
                 }
             }
 

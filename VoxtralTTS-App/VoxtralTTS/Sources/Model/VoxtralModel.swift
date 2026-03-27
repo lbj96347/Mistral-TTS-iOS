@@ -115,7 +115,8 @@ class VoxtralTTSModel: Module {
         temperature: Float = 0.0,
         topP: Float = 1.0,
         maxAudioFrames: Int = 2048,
-        progressCallback: ((Int, Int) -> Void)? = nil
+        progressCallback: ((Int, Int) -> Void)? = nil,
+        shouldCancel: (() -> Bool)? = nil
     ) -> GenerationResult? {
         let startTime = CFAbsoluteTimeGetCurrent()
         let audioConfig = config.audioConfig
@@ -148,6 +149,12 @@ class VoxtralTTSModel: Module {
         var allAcousticCodes: [MLXArray] = []
 
         for frameIdx in 0 ..< maxAudioFrames {
+            // Check cancellation
+            if shouldCancel?() == true {
+                print("[TTS-Gen] Generation cancelled at frame \(frameIdx)")
+                break
+            }
+
             // Sample semantic token from LLM
             let lastLogits = logits[0..., -1, 0...]
             let semToken = sampleToken(lastLogits, temperature: temperature, topP: topP)
@@ -256,38 +263,33 @@ func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConf
     // Handle quantization - replace compatible Linear layers with QuantizedLinear
     if let quantConfig = config.quantization {
         print("[TTS-Model] Applying quantization: bits=\(quantConfig.bits), groupSize=\(quantConfig.groupSize)")
-        // Quantize language model and acoustic transformer (not codec — its
-        // decoder_blocks heterogeneous array is incompatible with quantize's update)
+        let linearFilter: (String, Module) -> Bool = { _, module in
+            if let linear = module as? Linear {
+                let shape = linear.weight.shape
+                let lastDim = shape[shape.count - 1]
+                let minDim = shape.min() ?? 0
+                return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
+            }
+            return false
+        }
+
         quantize(
             model: model.languageModel,
             groupSize: quantConfig.groupSize,
             bits: quantConfig.bits,
-            filter: { _, module in
-                if let linear = module as? Linear {
-                    let shape = linear.weight.shape
-                    let lastDim = shape[shape.count - 1]
-                    let minDim = shape.min() ?? 0
-                    return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
-                } else if let embedding = module as? Embedding {
+            filter: { path, module in
+                if let embedding = module as? Embedding {
                     let (_, dims) = embedding.shape
                     return dims % quantConfig.groupSize == 0 && dims > quantConfig.groupSize
                 }
-                return false
+                return linearFilter(path, module)
             }
         )
         quantize(
             model: model.acousticTransformer,
             groupSize: quantConfig.groupSize,
             bits: quantConfig.bits,
-            filter: { _, module in
-                if let linear = module as? Linear {
-                    let shape = linear.weight.shape
-                    let lastDim = shape[shape.count - 1]
-                    let minDim = shape.min() ?? 0
-                    return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
-                }
-                return false
-            }
+            filter: linearFilter
         )
         quantize(
             model: model.audioTokenEmbedding,
@@ -301,6 +303,18 @@ func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConf
                 return false
             }
         )
+        // Quantize codec transformer blocks individually (heterogeneous decoder_blocks
+        // array is incompatible with quantize's update on the whole codec)
+        for block in model.audioTokenizer.decoderBlocks {
+            if let tfBlock = block as? DecoderTransformerBlock {
+                quantize(
+                    model: tfBlock,
+                    groupSize: quantConfig.groupSize,
+                    bits: quantConfig.bits,
+                    filter: linearFilter
+                )
+            }
+        }
         print("[TTS-Model] Quantization applied")
     }
 

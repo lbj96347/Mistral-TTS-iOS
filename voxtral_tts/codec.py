@@ -238,19 +238,22 @@ class CodecAttention(nn.Module):
         self.wo = nn.Linear(n_heads * head_dim, dim, bias=False)
 
         if qk_norm:
-            self.q_norm = RMSNorm(head_dim, eps=qk_norm_eps)
-            self.k_norm = RMSNorm(head_dim, eps=qk_norm_eps)
+            self.q_norm = RMSNorm(n_heads * head_dim, eps=qk_norm_eps)
+            self.k_norm = RMSNorm(n_kv_heads * head_dim, eps=qk_norm_eps)
 
     def __call__(self, x: mx.array) -> mx.array:
         B, T, _ = x.shape
 
-        q = self.wq(x).reshape(B, T, self.n_heads, self.head_dim)
-        k = self.wk(x).reshape(B, T, self.n_kv_heads, self.head_dim)
-        v = self.wv(x).reshape(B, T, self.n_kv_heads, self.head_dim)
+        q_proj = self.wq(x)
+        k_proj = self.wk(x)
 
         if self.qk_norm:
-            q = self.q_norm(q)
-            k = self.k_norm(k)
+            q_proj = self.q_norm(q_proj)
+            k_proj = self.k_norm(k_proj)
+
+        q = q_proj.reshape(B, T, self.n_heads, self.head_dim)
+        k = k_proj.reshape(B, T, self.n_kv_heads, self.head_dim)
+        v = self.wv(x).reshape(B, T, self.n_kv_heads, self.head_dim)
 
         if self.n_rep > 1:
             k = mx.repeat(k, self.n_rep, axis=2)
