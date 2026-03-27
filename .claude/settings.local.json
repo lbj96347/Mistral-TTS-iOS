@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cp VoxtralTTS/Sources/VoxtralTTS/Views/*.swift VoxtralTTS-App/VoxtralTTS/Sources/Views/)",
+      "Bash(cp VoxtralTTS/Sources/VoxtralTTS/Audio/*.swift VoxtralTTS-App/VoxtralTTS/Sources/Audio/)",
+      "Bash(cp VoxtralTTS/Sources/VoxtralTTS/Model/*.swift VoxtralTTS-App/VoxtralTTS/Sources/Model/)",
+      "Bash(cp VoxtralTTS/Sources/VoxtralTTS/Tokenizer/*.swift VoxtralTTS-App/VoxtralTTS/Sources/Tokenizer/)",
+      "Bash(xcodegen generate:*)",
+      "Bash(open:*)"
     ]
   }
 }
