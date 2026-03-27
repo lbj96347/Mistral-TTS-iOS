@@ -88,10 +88,24 @@ def load(model_path: str) -> Tuple["Model", Any]:
     # Handle quantization if config specifies it
     quant_config = config_data.get("quantization")
     if quant_config:
+        q_group_size = quant_config.get("group_size", 64)
+
+        def _can_quantize(path: str, module: nn.Module) -> bool:
+            if not hasattr(module, "to_quantized"):
+                return False
+            if isinstance(module, nn.Linear):
+                # Skip layers whose input dim isn't divisible by group_size
+                if module.weight.shape[-1] % q_group_size != 0:
+                    return False
+                if min(module.weight.shape) <= q_group_size:
+                    return False
+            return True
+
         nn.quantize(
             model,
             bits=quant_config.get("bits", 4),
-            group_size=quant_config.get("group_size", 64),
+            group_size=q_group_size,
+            class_predicate=_can_quantize,
         )
 
     # Load weights (merge shards if multiple files)
