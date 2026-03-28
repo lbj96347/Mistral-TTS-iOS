@@ -36,7 +36,7 @@ Converts the HuggingFace model (~8GB) into MLX format with optional quantization
 
 > Text: *"Good morning! Nice to see you again!"*
 
-<audio controls src="audio_sample/voxtral_output_iPhone.wav"></audio>
+<audio controls src="audio_sample/voxtral_output_iPhone.mp3"></audio>
 
 [voxtral_output_iPhone.wav](audio_sample/voxtral_output_iPhone.wav)
 

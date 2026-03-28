@@ -19,10 +19,11 @@ mlx_model_q2/
 mlx_model_ios/
 
 # Swift / Xcode
-VoxtralTTS/.build/
-VoxtralTTS/.swiftpm/
+*.build/
+*.swiftpm/
 DerivedData/
 *.xcuserstate
+xcuserdata/
 
 # IDE
 .vscode/
