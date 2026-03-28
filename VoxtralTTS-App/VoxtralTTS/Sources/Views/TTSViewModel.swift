@@ -27,6 +27,7 @@ class TTSViewModel: ObservableObject {
     private var tokenizer: VoxtralTokenizer?
     private var modelConfig: ModelConfig?
     private var modelPath: URL?
+    private var securityScopedURL: URL?  // Keep security-scoped access alive on iOS
 
     // Generation task (for cancellation)
     private var generationTask: Task<Void, Never>?
@@ -44,14 +45,44 @@ class TTSViewModel: ObservableObject {
     }
 
     // Persistence
-    private let modelPathKey = "VoxtralTTS.modelPath"
+    private let modelBookmarkKey = "VoxtralTTS.modelBookmark"
 
     var lastModelPath: String? {
-        UserDefaults.standard.string(forKey: modelPathKey)
+        // Resolve bookmark to get display path
+        guard let bookmarkData = UserDefaults.standard.data(forKey: modelBookmarkKey) else { return nil }
+        var isStale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale) else { return nil }
+        return url.path
     }
 
+    /// Resolve saved bookmark into a security-scoped URL for reloading
+    func resolveBookmark() -> URL? {
+        guard let bookmarkData = UserDefaults.standard.data(forKey: modelBookmarkKey) else { return nil }
+        var isStale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale) else { return nil }
+        if isStale {
+            // Re-save fresh bookmark
+            saveBookmark(for: url)
+        }
+        return url
+    }
+
+    private func saveBookmark(for url: URL) {
+        do {
+            let bookmarkData = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+            UserDefaults.standard.set(bookmarkData, forKey: modelBookmarkKey)
+        } catch {
+            print("[TTS] Failed to save bookmark: \(error)")
+        }
+    }
+
+    @Published var cachedVoices: [String] = []
+
     var availableVoices: [String] {
-        guard let path = modelPath else { return [] }
+        cachedVoices
+    }
+
+    private func loadAvailableVoices(from path: URL) -> [String] {
         let voiceDir = path.appendingPathComponent("voice_embedding")
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: voiceDir, includingPropertiesForKeys: nil
@@ -88,9 +119,18 @@ class TTSViewModel: ObservableObject {
         loadingStatus = "Loading config..."
         print("[TTS] loadModel called with path: \(url.path)")
 
-        // Start security-scoped access for sandboxed apps
+        // Release previous security-scoped access if any
+        if let prev = securityScopedURL {
+            prev.stopAccessingSecurityScopedResource()
+            securityScopedURL = nil
+        }
+
+        // Start security-scoped access — keep alive for voice embedding access
         let accessing = url.startAccessingSecurityScopedResource()
         print("[TTS] Security-scoped access: \(accessing)")
+        if accessing {
+            securityScopedURL = url
+        }
 
         Task {
             let startTime = CFAbsoluteTimeGetCurrent()
@@ -108,6 +148,10 @@ class TTSViewModel: ObservableObject {
                 let tokenizerElapsed = CFAbsoluteTimeGetCurrent() - tokenizerStart
                 print("[TTS] Tokenizer loaded in \(String(format: "%.2f", tokenizerElapsed))s")
 
+                // Cache voice list while we have access
+                let voices = self.loadAvailableVoices(from: url)
+                print("[TTS] Found \(voices.count) voice(s): \(voices)")
+
                 let totalElapsed = CFAbsoluteTimeGetCurrent() - startTime
                 print("[TTS] ✅ Total load time: \(String(format: "%.2f", totalElapsed))s")
 
@@ -116,11 +160,12 @@ class TTSViewModel: ObservableObject {
                     self.tokenizer = loadedTokenizer
                     self.modelConfig = config
                     self.modelPath = url
+                    self.cachedVoices = voices
                     self.modelLoaded = true
                     self.isLoadingModel = false
 
-                    // Save path for next launch
-                    UserDefaults.standard.set(url.path, forKey: modelPathKey)
+                    // Save bookmark for next launch (works across iOS relaunches)
+                    self.saveBookmark(for: url)
                 }
             } catch {
                 print("[TTS] ❌ Failed to load model: \(error.localizedDescription)")
@@ -129,10 +174,11 @@ class TTSViewModel: ObservableObject {
                     self.errorMessage = "Failed to load model: \(error.localizedDescription)"
                     self.isLoadingModel = false
                 }
-            }
-
-            if accessing {
-                url.stopAccessingSecurityScopedResource()
+                // Release access on failure
+                if accessing {
+                    url.stopAccessingSecurityScopedResource()
+                    self.securityScopedURL = nil
+                }
             }
         }
     }
@@ -193,8 +239,8 @@ class TTSViewModel: ObservableObject {
                         text: inputText,
                         tokenizer: tokenizer,
                         voiceEmbedding: voiceEmb,
-                        temperature: 0.4,
-                        topP: 0.9,
+                        temperature: 0.0,
+                        topP: 1.0,
                         maxAudioFrames: estimatedFrames,
                         progressCallback: { chunkIdx, chunkCount, frame, total in
                             Task { @MainActor in
@@ -217,8 +263,8 @@ class TTSViewModel: ObservableObject {
                     result = model.generate(
                         textTokenIds: textTokenIds,
                         voiceEmbedding: voiceEmb,
-                        temperature: 0.4,
-                        topP: 0.9,
+                        temperature: 0.0,
+                        topP: 1.0,
                         maxAudioFrames: estimatedFrames,
                         progressCallback: { frame, total in
                             Task { @MainActor in

@@ -19,6 +19,9 @@ struct ContentView: View {
             .navigationTitle("Voxtral TTS")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
             #endif
             .onAppear {
                 viewModel.checkAutoLoadArgument()
@@ -56,7 +59,11 @@ struct ContentView: View {
 
             if let lastPath = viewModel.lastModelPath {
                 Button("Reload Last Model") {
-                    viewModel.loadModel(from: URL(fileURLWithPath: lastPath))
+                    if let url = viewModel.resolveBookmark() {
+                        viewModel.loadModel(from: url)
+                    } else {
+                        viewModel.errorMessage = "Saved bookmark is invalid. Please select the model directory again."
+                    }
                 }
                 .buttonStyle(.bordered)
 
