@@ -247,7 +247,7 @@ class MistralTransformerDecoder(nn.Module):
         hidden_states = h  # Post-norm hidden states for downstream use
 
         if self.tie_word_embeddings:
-            logits = h @ self.tok_embeddings.weight.T
+            logits = self.tok_embeddings.as_linear(h)
         else:
             logits = self.output(h)
 

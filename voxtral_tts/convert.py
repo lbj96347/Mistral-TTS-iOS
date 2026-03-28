@@ -354,7 +354,8 @@ def convert(
         group_size = 64
         quantized = {}
         for key, value in weights.items():
-            if (value.ndim == 2 and
+            if (key.endswith(".weight") and
+                    value.ndim == 2 and
                     value.shape[-1] % group_size == 0 and
                     min(value.shape) > group_size):
                 # mx.quantize returns (quantized_weight, scales, biases)
