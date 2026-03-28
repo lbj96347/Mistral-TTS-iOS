@@ -101,24 +101,37 @@ def load(model_path: str) -> Tuple["Model", Any]:
     model = Model(config)
 
     # Handle quantization if config specifies it
+    # Supports mixed per-component quantization (e.g. q2 LLM + q4 acoustic)
     quant_config = config_data.get("quantization")
     if quant_config:
         q_group_size = quant_config.get("group_size", 64)
+        q_default_bits = quant_config.get("bits", 4)
+        q_component_bits = quant_config.get("component_bits", {})
 
-        def _can_quantize(path: str, module: nn.Module) -> bool:
+        def _get_component_from_path(path: str) -> str:
+            for prefix in ("language_model", "acoustic_transformer",
+                           "audio_tokenizer", "audio_token_embedding"):
+                if path.startswith(prefix):
+                    return prefix
+            return "unknown"
+
+        def _can_quantize(path: str, module: nn.Module):
             if not hasattr(module, "to_quantized"):
                 return False
             if isinstance(module, nn.Linear):
-                # Skip layers whose input dim isn't divisible by group_size
                 if module.weight.shape[-1] % q_group_size != 0:
                     return False
                 if min(module.weight.shape) <= q_group_size:
                     return False
-            return True
+            if not q_component_bits:
+                return True  # uniform quantization, use bits= from nn.quantize call
+            component = _get_component_from_path(path)
+            bits = q_component_bits.get(component, q_default_bits)
+            return {"bits": bits, "group_size": q_group_size}
 
         nn.quantize(
             model,
-            bits=quant_config.get("bits", 4),
+            bits=q_default_bits,
             group_size=q_group_size,
             class_predicate=_can_quantize,
         )

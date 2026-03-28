@@ -448,16 +448,30 @@ def convert(
         default_bits = bits_map.get(quantize, 4) if quantize else 4
 
         # Per-component bits (fall back to default)
+        # Minimum Q4 for LLM and acoustic transformer — these are in the
+        # autoregressive loop and Q2 degrades hidden states too much.
+        # Codec tolerates Q2 since it's a one-shot convolutional decoder.
+        MIN_AUTOREGRESSIVE_BITS = 4
+        llm_bits = max(bits_map.get(quantize_llm, default_bits), MIN_AUTOREGRESSIVE_BITS)
+        acoustic_bits = max(bits_map.get(quantize_acoustic, default_bits), MIN_AUTOREGRESSIVE_BITS)
+        codec_bits = bits_map.get(quantize_codec, default_bits)
+
+        if quantize_llm and bits_map.get(quantize_llm, 4) < MIN_AUTOREGRESSIVE_BITS:
+            print(f"  WARNING: LLM quantization {quantize_llm} too aggressive, using q{MIN_AUTOREGRESSIVE_BITS}")
+        if quantize_acoustic and bits_map.get(quantize_acoustic, 4) < MIN_AUTOREGRESSIVE_BITS:
+            print(f"  WARNING: Acoustic quantization {quantize_acoustic} too aggressive, using q{MIN_AUTOREGRESSIVE_BITS}")
+
         component_bits = {
-            "language_model": bits_map.get(quantize_llm, default_bits),
-            "acoustic_transformer": bits_map.get(quantize_acoustic, default_bits),
-            "audio_tokenizer": bits_map.get(quantize_codec, default_bits),
-            "audio_token_embedding": bits_map.get(quantize_llm, default_bits),  # follows LLM
+            "language_model": llm_bits,
+            "acoustic_transformer": acoustic_bits,
+            "audio_tokenizer": codec_bits,
+            "audio_token_embedding": max(acoustic_bits, MIN_AUTOREGRESSIVE_BITS),  # follows acoustic (37 embeddings summed per frame need higher precision)
         }
 
         print(f"  Quantizing: LLM=q{component_bits['language_model']}, "
               f"acoustic=q{component_bits['acoustic_transformer']}, "
-              f"codec=q{component_bits['audio_tokenizer']}")
+              f"codec=q{component_bits['audio_tokenizer']}, "
+              f"emb=q{component_bits['audio_token_embedding']}")
 
         quantized = {}
         for key, value in weights.items():

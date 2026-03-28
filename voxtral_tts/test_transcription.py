@@ -297,6 +297,23 @@ def main():
     model, tokenizer = load(args.model_path)
     print(f"Model loaded. Sample rate: {model.sample_rate}")
 
+    # Auto-detect voice embedding if not specified
+    voice = args.voice
+    if voice is None:
+        from pathlib import Path
+        voice_dir = Path(args.model_path) / "voice_embedding"
+        if voice_dir.exists():
+            # Prefer .pt files (torch format), fall back to .safetensors
+            pt_files = sorted(voice_dir.glob("*.pt"))
+            if pt_files:
+                voice = str(pt_files[0])
+            else:
+                sf_files = sorted(voice_dir.glob("*.safetensors"))
+                if sf_files:
+                    voice = str(sf_files[0])
+            if voice:
+                print(f"Auto-selected voice: {Path(voice).stem}")
+
     if args.suite:
         phrases = TEST_PHRASES
     else:
@@ -308,7 +325,7 @@ def main():
     for i, text in enumerate(phrases):
         out_path = args.output if total == 1 else f"test_transcription_{i}.wav"
         ok = run_single_test(
-            model, tokenizer, text, args.voice, out_path,
+            model, tokenizer, text, voice, out_path,
             args.whisper_model, args.threshold, args.verbose, args.diagnose,
         )
         if ok:

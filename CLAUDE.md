@@ -26,9 +26,9 @@ python3 -m voxtral_tts.convert --inspect
 python3 -m voxtral_tts.convert --output-dir mlx_model
 python3 -m voxtral_tts.convert --output-dir mlx_model --quantize q4
 
-# Convert with mixed quantization for iOS (q2 LLM + q4 audio)
+# Convert with mixed quantization for iOS (q4 LLM/acoustic + q2 codec)
 python3 -m voxtral_tts.convert --output-dir mlx_model_ios \
-    --quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4
+    --quantize-llm q4 --quantize-acoustic q4 --quantize-codec q2
 
 # Test weight loading after conversion
 python3 -m voxtral_tts.test_model --model-path mlx_model --test loading

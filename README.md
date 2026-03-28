@@ -46,9 +46,9 @@ python3 -m voxtral_tts.convert --output-dir mlx_model
 # With uniform quantization (q2, q4, q6, q8)
 python3 -m voxtral_tts.convert --output-dir mlx_model --quantize q4
 
-# Mixed quantization for iOS (recommended for iPhone 15 Pro / 8GB devices)
+# Mixed quantization for iOS (Q4 LLM/acoustic, Q2 codec for size savings)
 python3 -m voxtral_tts.convert --output-dir mlx_model_ios \
-    --quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4
+    --quantize-llm q4 --quantize-acoustic q4 --quantize-codec q2
 ```
 
 #### Quantization Guide
@@ -57,13 +57,15 @@ python3 -m voxtral_tts.convert --output-dir mlx_model_ios \
 |---|---|---|---|
 | Mac (M1/M2/M3/M4) | 16GB+ | `--quantize q4` | ~2.1 GB |
 | Mac (8GB) | 8GB | `--quantize q4` | ~2.1 GB |
-| iPhone 15 Pro / iPad Pro | 8GB | `--quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4` | ~1.3 GB |
-| iPhone 16 Pro | 8GB | `--quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4` | ~1.3 GB |
+| iPhone 15 Pro / iPad Pro | 8GB | `--quantize-llm q4 --quantize-acoustic q4 --quantize-codec q2` | ~2.1 GB |
+| iPhone 16 Pro | 8GB | `--quantize-llm q4 --quantize-acoustic q4 --quantize-codec q2` | ~2.1 GB |
 
 Mixed quantization applies different bit widths per component:
-- `--quantize-llm` — Language model (3.4B params, most quantization-tolerant)
-- `--quantize-acoustic` — Acoustic transformer (390M params, audio-quality-sensitive)
-- `--quantize-codec` — Codec (300M params, audio-quality-sensitive)
+- `--quantize-llm` — Language model (3.4B params, minimum Q4 enforced)
+- `--quantize-acoustic` — Acoustic transformer (390M params, minimum Q4 enforced)
+- `--quantize-codec` — Codec (300M params, tolerates Q2 since it's not in autoregressive loop)
+
+**Note:** The LLM and acoustic transformer require Q4 minimum for intelligible speech. Values below Q4 are automatically clamped with a warning.
 
 Per-component flags override `--quantize` when both are specified.
 
@@ -92,7 +94,7 @@ The iOS app includes several optimizations to fit within iOS jetsam memory limit
 - **Quantized output projection** — Tied embedding output uses `quantizedMM` instead of dequantizing the full weight matrix.
 - **GPU cache limit** — MLX buffer cache is capped at 20MB on iOS (per MLX recommendations) to prevent unbounded memory growth during autoregressive generation.
 - **Periodic cache clearing** — `Memory.clearCache()` is called every 50 frames during generation.
-- **Mixed quantization** — The LLM (largest component) can use aggressive q2 while keeping audio-sensitive components at q4.
+- **Mixed quantization** — The codec (not in autoregressive loop) can use Q2 while LLM and acoustic transformer stay at Q4 minimum.
 
 ### Running on iOS
 
