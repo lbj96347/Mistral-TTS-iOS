@@ -126,10 +126,14 @@ class WeightNormedConvTranspose1d(nn.Module):
     """ConvTranspose1d with weight normalization (parametrized).
 
     Weights from safetensors are stored as:
-      conv.parametrizations.weight.original0: [out_ch, 1, 1]  (magnitude/scale)
-      conv.parametrizations.weight.original1: [out_ch, in_ch, kernel]  (direction)
+      conv.parametrizations.weight.original0: [dim, 1, 1]  (magnitude/scale)
+      conv.parametrizations.weight.original1: [dim, kernel, dim2]  (direction)
 
-    The effective weight = original0 * (original1 / ||original1||)
+    For stride=1 (block 0): stored as Conv1d format [out, kernel, in] — correct.
+    For stride>1 (blocks 2,4,6): stored as ConvTranspose1d format after wrong
+    transposition — original PyTorch [in, out, kernel] was transposed as if it were
+    Conv1d [out, in, kernel], giving [in, kernel, out] instead of [out, kernel, in].
+    We correct this at weight-computation time.
     """
 
     def __init__(self, in_channels: int, out_channels: int,
@@ -144,11 +148,24 @@ class WeightNormedConvTranspose1d(nn.Module):
 
     def _get_weight(self) -> mx.array:
         """Compute effective weight from parametrizations."""
-        g = self.parametrizations.weight.original0  # [out, 1, 1]
-        v = self.parametrizations.weight.original1  # [out, in, kernel] (PyTorch) or [out, kernel, in] (MLX)
-        # Normalize v along non-output dims
-        v_norm = mx.sqrt(mx.sum(v * v, axis=(1, 2), keepdims=True) + 1e-12)
-        return g * (v / v_norm)
+        g = self.parametrizations.weight.original0
+        v = self.parametrizations.weight.original1
+
+        if self.stride > 1:
+            # ConvTranspose1d: the converter applied Conv1d's transpose(0,2,1)
+            # to PyTorch's [in, out, kernel], giving stored [in, kernel, out].
+            # Undo to get original [in, out, kernel], normalize per in_ch,
+            # then transpose to MLX format [out, kernel, in].
+            v_orig = v.transpose(0, 2, 1)  # [in, out, kernel]
+            # g: [in_ch, 1, 1], normalize over (out, kernel) per in_ch
+            v_norm = mx.sqrt(mx.sum(v_orig * v_orig, axis=(1, 2), keepdims=True) + 1e-12)
+            w_orig = g * (v_orig / v_norm)  # [in, out, kernel]
+            return w_orig.transpose(1, 2, 0)  # [out, kernel, in] for MLX
+        else:
+            # Conv1d: stored correctly as [out, kernel, in]
+            # g: [out_ch, 1, 1], normalize over (kernel, in) per out_ch
+            v_norm = mx.sqrt(mx.sum(v * v, axis=(1, 2), keepdims=True) + 1e-12)
+            return g * (v / v_norm)
 
     def __call__(self, x: mx.array) -> mx.array:
         """Forward pass.
@@ -160,8 +177,6 @@ class WeightNormedConvTranspose1d(nn.Module):
             [B, T', C'] upsampled output
         """
         weight = self._get_weight()  # [out, kernel, in] in MLX convention
-        # MLX ConvTranspose1d expects weight shape [out, kernel, in]
-        # Use functional conv_transpose1d
         y = mx.conv_transpose1d(x, weight, stride=self.stride, padding=0)
         # Trim right side to maintain causal property
         if self.trim > 0:
@@ -213,9 +228,13 @@ class ParametrizationsContainer(nn.Module):
 # --- Attention for Codec ---
 
 class CodecAttention(nn.Module):
-    """Multi-head attention for codec transformer blocks.
+    """Multi-head attention for codec transformer blocks with ALiBi positional bias.
 
     Matches weight keys: attention.{wq,wk,wv,wo,q_norm,k_norm}.weight
+
+    Uses ALiBi (Attention with Linear Biases) for positional encoding:
+    slopes = 2^(-8/n_heads * [1, 2, ..., n_heads])
+    bias[h, i, j] = -slope[h] * |i - j|  (causal: only i >= j)
     """
 
     def __init__(self, dim: int, n_heads: int, n_kv_heads: int,
@@ -241,6 +260,11 @@ class CodecAttention(nn.Module):
             self.q_norm = RMSNorm(n_heads * head_dim, eps=qk_norm_eps)
             self.k_norm = RMSNorm(n_kv_heads * head_dim, eps=qk_norm_eps)
 
+        # ALiBi slopes: 2^(-8/n_heads * h) for h in [1..n_heads]
+        r = 2.0 ** (-8.0 / n_heads)
+        slopes = [r ** (h + 1) for h in range(n_heads)]
+        self._alibi_slopes = mx.array(slopes)  # [n_heads]
+
     def __call__(self, x: mx.array) -> mx.array:
         B, T, _ = x.shape
 
@@ -265,26 +289,36 @@ class CodecAttention(nn.Module):
 
         scores = (q @ k.transpose(0, 1, 3, 2)) * self.scale
 
-        if self.causal or self.sliding_window > 0:
-            mask = self._build_mask(T)
-            scores = scores + mask
+        # Apply ALiBi positional bias + causal mask + sliding window
+        bias = self._build_alibi_bias(T)  # [n_heads, T, T]
+        scores = scores + bias
 
         weights = mx.softmax(scores, axis=-1)
         output = weights @ v
         output = output.transpose(0, 2, 1, 3).reshape(B, T, -1)
         return self.wo(output)
 
-    def _build_mask(self, T: int) -> mx.array:
+    def _build_alibi_bias(self, T: int) -> mx.array:
+        """Build ALiBi attention bias with causal mask and sliding window."""
         rows = mx.arange(T)[:, None]
         cols = mx.arange(T)[None, :]
-        mask = mx.zeros((T, T))
+        rel_pos = rows - cols  # [T, T], positive = past
+
+        # ALiBi bias: -slope * |distance| for valid positions
+        # For causal: distance = rows - cols (only positive)
+        alibi = -self._alibi_slopes[:, None, None] * mx.abs(rel_pos)[None, :, :]  # [H, T, T]
+
+        # Causal mask: mask out future positions (cols > rows)
         if self.causal:
-            causal_mask = cols > rows
-            mask = mx.where(causal_mask, mx.array(-1e9), mask)
+            causal_mask = (cols > rows)[None, :, :]  # [1, T, T]
+            alibi = mx.where(causal_mask, mx.array(-1e9), alibi)
+
+        # Sliding window: mask out positions too far in the past
         if self.sliding_window > 0:
-            window_mask = (rows - cols) >= self.sliding_window
-            mask = mx.where(window_mask, mx.array(-1e9), mask)
-        return mask
+            window_mask = (rel_pos >= self.sliding_window)[None, :, :]  # [1, T, T]
+            alibi = mx.where(window_mask, mx.array(-1e9), alibi)
+
+        return alibi
 
 
 class CodecFeedForward(nn.Module):
@@ -428,7 +462,12 @@ class VoxtralCodec(nn.Module):
 
         # Build decoder_blocks as a flat list matching safetensors indexing
         self.decoder_blocks = []
-        sliding_window = args.attn_sliding_window_size
+
+        # Decoder sliding window starts small and doubles upon upsampling.
+        # The encoder starts at attn_sliding_window_size (16) and halves upon downsampling,
+        # ending at 2. The decoder reverses this: starts at 2 and doubles to 16.
+        n_upsample_stages = sum(1 for s in strides if s > 1)  # 3
+        sliding_window = max(1, args.attn_sliding_window_size // (2 ** n_upsample_stages))
 
         for stage_idx in range(len(strides)):
             # Conv block (even indices: 0, 2, 4, 6)
@@ -437,15 +476,16 @@ class VoxtralCodec(nn.Module):
                 DecoderConvBlock(in_ch, dim, kernels[stage_idx], strides[stage_idx])
             )
 
+            # Double sliding window AFTER upsampling conv, BEFORE transformer
+            # The transformer processes the upsampled (longer) sequence
+            if args.half_attn_window_upon_downsampling and strides[stage_idx] > 1:
+                sliding_window = sliding_window * 2
+
             # Transformer block (odd indices: 1, 3, 5, 7)
             self.decoder_blocks.append(
                 DecoderTransformerBlock(args, n_layers=n_blocks_per_stage[stage_idx],
                                        sliding_window=sliding_window)
             )
-
-            # Halve sliding window after upsampling
-            if args.half_attn_window_upon_downsampling and strides[stage_idx] > 1:
-                sliding_window = max(1, sliding_window // 2)
 
         # Output projection
         self.output_proj = OutputProjection(dim, args.pretransform_patch_size,

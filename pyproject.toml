@@ -17,9 +17,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = [
+    "mlx-whisper>=0.4.0",
+]
 dev = [
     "pytest>=7.0",
     "torch>=2.0",  # For weight conversion from .pt files
+    "mlx-whisper>=0.4.0",
 ]
 
 [build-system]

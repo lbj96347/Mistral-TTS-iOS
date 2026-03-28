@@ -24,7 +24,7 @@ class TimeEmbedding: Module {
             tReshaped = t.reshaped(1)
         }
         let scaled = tReshaped.expandedDimensions(axis: 1) * emb.expandedDimensions(axis: 0)
-        return MLX.concatenated([MLX.sin(scaled), MLX.cos(scaled)], axis: -1)
+        return MLX.concatenated([MLX.cos(scaled), MLX.sin(scaled)], axis: -1)
     }
 }
 
@@ -174,16 +174,26 @@ class FlowMatchingAcousticTransformer: Module {
         let timeProj = timeProjection(timeEmb)
         let llmProj = llmProjection(llmHidden)
 
-        var h = (acousticProj + timeProj + llmProj).reshaped(-1, 1, acousticConfig.dim)
+        // Concatenate as 3-token sequence: [noise_state, time, llm_hidden]
+        let acousticTok = acousticProj.reshaped(-1, 1, acousticConfig.dim)
+        let timeTok = timeProj.reshaped(-1, 1, acousticConfig.dim)
+        let llmTok = llmProj.reshaped(-1, 1, acousticConfig.dim)
+
+        var h = MLX.concatenated([acousticTok, timeTok, llmTok], axis: 1)  // [B, 3, dim]
 
         for layer in layers {
             h = layer(h)
         }
 
         h = norm(h)
-        h = h.squeezed(axis: 1)
 
-        return acousticCodebookOutput(h)
+        // Extract first token output (noise state position) for velocity
+        return acousticCodebookOutput(h[0..., 0, 0...])  // [B, n_acoustic]
+    }
+
+    /// Predict semantic token from LLM hidden state
+    func predictSemantic(llmHidden: MLXArray) -> MLXArray {
+        return semanticCodebookOutput(llmHidden)  // [B, padded_semantic_size]
     }
 
     func decodeOneFrame(llmHidden: MLXArray) -> MLXArray {
@@ -191,9 +201,12 @@ class FlowMatchingAcousticTransformer: Module {
         let nAcoustic = audioConfig.nAcousticCodebook
 
         var xT = MLXRandom.normal([B, nAcoustic]) * noiseScale
-        let dt: Float = 1.0 / Float(acousticDecodeIters)
 
-        for i in 0 ..< acousticDecodeIters {
+        // Euler integration: linspace(0, 1, num_iters) gives num_iters-1 steps
+        let numIters = acousticDecodeIters  // 8
+        let dt: Float = 1.0 / Float(numIters - 1)  // 1/7
+
+        for i in 0 ..< (numIters - 1) {  // 7 steps
             let t = MLXArray.full([B], values: MLXArray(Float(i) * dt))
 
             let vCond = predictVelocity(xT, t: t, llmHidden: llmHidden)

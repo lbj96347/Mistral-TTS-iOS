@@ -241,8 +241,8 @@ class MistralTransformerDecoder: Module {
             newCache.append(c)
         }
 
-        let hiddenStates = h
         h = norm(h)
+        let hiddenStates = h  // Post-norm hidden states for downstream use
 
         let logits: MLXArray
         if tieWordEmbeddings {

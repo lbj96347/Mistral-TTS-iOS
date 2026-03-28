@@ -32,20 +32,36 @@ let TEXT_TO_AUDIO_TOKEN_ID: Int32 = 36  // [NEXT_AUDIO_TEXT]
 // MARK: - Sampling
 
 func sampleToken(_ logits: MLXArray, temperature: Float = 0.0, topP: Float = 1.0) -> MLXArray {
+    // Safety: if logits have zero elements, fall back to returning 0
+    if logits.dim(-1) == 0 {
+        return MLXArray(Int32(0)).expandedDimensions(axis: 0)
+    }
+
     if temperature == 0.0 {
         return MLX.argMax(logits, axis: -1)
     }
 
     let scaled = logits / temperature
 
+    // Check for NaN/Inf in logits — fall back to greedy if found
+    let hasNan = MLX.any(isNaN(scaled))
+    eval(hasNan)
+    if hasNan.item(Bool.self) {
+        return MLX.argMax(logits, axis: -1)
+    }
+
     if topP < 1.0 {
+        // Sort descending
         let sortedIndices = MLX.argSort(-scaled, axis: -1)
-        let sortedLogits = scaled.take(sortedIndices, axis: -1)
-        let cumulativeProbs = MLX.cumsum(softmax(sortedLogits, axis: -1), axis: -1)
-        let mask = cumulativeProbs - softmax(sortedLogits, axis: -1) .>= topP
+        let sortedLogits = takeAlong(scaled, sortedIndices, axis: -1)
+        let sortedProbs = softmax(sortedLogits, axis: -1)
+        let cumulativeProbs = MLX.cumsum(sortedProbs, axis: -1)
+        // Mask tokens beyond top-p (always keep first token)
+        let mask = (cumulativeProbs - sortedProbs) .>= topP
         let maskedLogits = MLX.where(mask, MLXArray(-Float.infinity), sortedLogits)
-        // Scatter back - simplified: just use sorted
-        return MLXRandom.categorical(maskedLogits)
+        // Sample in sorted space, then map back to original indices
+        let sampledSorted = MLXRandom.categorical(maskedLogits)  // [B]
+        return takeAlong(sortedIndices, sampledSorted.expandedDimensions(axis: -1), axis: -1).squeezed(axis: -1)
     }
 
     return MLXRandom.categorical(scaled)
@@ -171,54 +187,51 @@ class VoxtralTTSModel: Module {
         var hiddenStates = result.hiddenStates
         var cache = result.newCache
 
-        // Audio token range for logit masking
-        let audioStart = audioConfig.audioTokenId       // 24
-        let audioEnd = audioStart + AUDIO_CODE_OFFSET + audioConfig.semanticCodebookSize  // 8218
-
         // Autoregressive audio generation
+        // Semantic tokens predicted by acoustic transformer's semantic head, not LLM logits
         var allSemanticCodes: [MLXArray] = []
         var allAcousticCodes: [MLXArray] = []
-        var pastAudioTokens: [Int32] = []
+        var pastSemanticCodes: [Int32] = []
 
         for frameIdx in 0 ..< maxAudioFrames {
             if shouldCancel?() == true { break }
 
-            // Extract last logits and mask to audio token range
-            var lastLogits = logits[0..., -1, 0...]  // [B, vocab_size]
+            // Get last hidden state (post-norm) for acoustic transformer
+            let lastHidden = hiddenStates[0..., -1, 0...]  // [B, dim]
 
-            // Apply repetition penalty via mask
-            if repetitionPenalty != 1.0 && !pastAudioTokens.isEmpty {
-                let uniqueTokens = Array(Set(pastAudioTokens))
-                var penaltyValues = [Float](repeating: 1.0, count: lastLogits.dim(1))
+            // Predict semantic token using acoustic transformer's semantic head
+            var semanticLogits = acousticTransformer.predictSemantic(llmHidden: lastHidden)  // [B, 8320]
+
+            // Apply repetition penalty to semantic logits
+            if repetitionPenalty != 1.0 && !pastSemanticCodes.isEmpty {
+                let uniqueTokens = Array(Set(pastSemanticCodes))
+                var penaltyValues = [Float](repeating: 1.0, count: semanticLogits.dim(1))
                 for tokenId in uniqueTokens {
                     let idx = Int(tokenId)
                     if idx < penaltyValues.count {
-                        let score: Float = lastLogits[0, idx].item()
+                        let score: Float = semanticLogits[0, idx].item()
                         penaltyValues[idx] = score > 0 ? (1.0 / repetitionPenalty) : repetitionPenalty
                     }
                 }
                 let penaltyMask = MLXArray(penaltyValues).reshaped(1, -1)
-                lastLogits = lastLogits * penaltyMask
+                semanticLogits = semanticLogits * penaltyMask
             }
 
-            // Slice to audio range [24..8218)
-            let audioLogits = lastLogits[0..., audioStart..<audioEnd]  // [B, 8194]
-            let relativeToken = sampleToken(audioLogits, temperature: temperature, topP: topP)
-            let semToken = relativeToken + Int32(audioStart)
+            // Sample semantic token (indices 0-8319)
+            let semCodeRaw = sampleToken(semanticLogits, temperature: temperature, topP: topP)
 
-            // Check end-of-audio: relative token 0 or 1 = special (EMPTY or BEGIN_AUDIO)
-            if MLX.any(relativeToken .< Int32(AUDIO_CODE_OFFSET)).item(Bool.self) {
+            // Check end-of-audio: code 0 (EMPTY) or 1 (END) = stop
+            if MLX.any(semCodeRaw .< Int32(AUDIO_CODE_OFFSET)).item(Bool.self) {
                 break
             }
 
-            // Map to semantic codebook index (0-8191)
-            let semCode = semToken - Int32(audioConfig.audioTokenId + AUDIO_CODE_OFFSET)
+            // Map from raw semantic output to codebook index (0-8191)
+            let semCode = semCodeRaw - Int32(AUDIO_CODE_OFFSET)
 
             // Track for repetition penalty
-            pastAudioTokens.append(semToken[0].item(Int32.self))
+            pastSemanticCodes.append(semCodeRaw[0].item(Int32.self))
 
             // Stage 2: Flow matching for acoustic codes
-            let lastHidden = hiddenStates[0..., -1, 0...]
             let acouCode = acousticTransformer.decodeOneFrame(llmHidden: lastHidden)
 
             allSemanticCodes.append(semCode)

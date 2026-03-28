@@ -48,7 +48,7 @@ class TimeEmbedding(nn.Module):
             t = t.reshape(1)
 
         emb = t[:, None] * emb[None, :]  # [B, half_dim]
-        emb = mx.concatenate([mx.sin(emb), mx.cos(emb)], axis=-1)  # [B, dim]
+        emb = mx.concatenate([mx.cos(emb), mx.sin(emb)], axis=-1)  # [B, dim]
         return emb
 
 
@@ -221,19 +221,33 @@ class FlowMatchingAcousticTransformer(nn.Module):
         time_proj = self.time_projection(time_emb)
         llm_proj = self.llm_projection(llm_hidden)
 
-        # Sum projections: [B, dim] -> [B, 1, dim]
-        h = (acoustic_proj + time_proj + llm_proj).reshape(-1, 1, self.acoustic_args.dim)
+        # Concatenate as 3-token sequence: [noise_state, time, llm_hidden]
+        acoustic_tok = acoustic_proj.reshape(-1, 1, self.acoustic_args.dim)  # [B, 1, dim]
+        time_tok = time_proj.reshape(-1, 1, self.acoustic_args.dim)          # [B, 1, dim]
+        llm_tok = llm_proj.reshape(-1, 1, self.acoustic_args.dim)            # [B, 1, dim]
 
-        # Forward through transformer layers
+        h = mx.concatenate([acoustic_tok, time_tok, llm_tok], axis=1)  # [B, 3, dim]
+
+        # Forward through transformer layers (bidirectional attention across 3 tokens)
         for layer in self.layers:
             h = layer(h)
 
         h = self.norm(h)
-        h = h.squeeze(1)  # [B, dim]
 
-        # Predict acoustic velocity
-        velocity = self.acoustic_codebook_output(h)  # [B, n_acoustic]
+        # Extract first token output (noise state position) for velocity prediction
+        velocity = self.acoustic_codebook_output(h[:, 0, :])  # [B, n_acoustic]
         return velocity
+
+    def predict_semantic(self, llm_hidden: mx.array) -> mx.array:
+        """Predict semantic token from LLM hidden state.
+
+        Args:
+            llm_hidden: [B, dim] post-norm hidden states from the LLM
+
+        Returns:
+            semantic_logits: [B, padded_semantic_size] logits over semantic vocab
+        """
+        return self.semantic_codebook_output(llm_hidden)
 
     def decode_one_frame(
         self,
@@ -242,7 +256,6 @@ class FlowMatchingAcousticTransformer(nn.Module):
         """Decode one frame of acoustic codes from LLM hidden states.
 
         Uses Euler ODE integration with classifier-free guidance.
-        Semantic tokens come from the LLM decoder, not from here.
 
         Args:
             llm_hidden: [B, dim] hidden states from the LLM
@@ -257,10 +270,11 @@ class FlowMatchingAcousticTransformer(nn.Module):
         # Initialize from noise
         x_t = mx.random.normal((B, n_acoustic)) * self._noise_scale
 
-        # Euler integration over [0, 1]
-        dt = 1.0 / self._acoustic_decode_iters
+        # Euler integration: linspace(0, 1, num_iters) gives num_iters-1 steps
+        num_iters = self._acoustic_decode_iters  # 8
+        dt = 1.0 / (num_iters - 1)  # 1/7
 
-        for i in range(self._acoustic_decode_iters):
+        for i in range(num_iters - 1):  # 7 steps
             t = mx.full((B,), i * dt)
 
             # Conditional velocity (with LLM hidden)

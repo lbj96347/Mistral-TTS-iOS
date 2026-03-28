@@ -243,8 +243,8 @@ class MistralTransformerDecoder(nn.Module):
             h, c = layer(h, freqs_cis, mask, layer_cache)
             new_cache.append(c)
 
-        hidden_states = h
         h = self.norm(h)
+        hidden_states = h  # Post-norm hidden states for downstream use
 
         if self.tie_word_embeddings:
             logits = h @ self.tok_embeddings.weight.T

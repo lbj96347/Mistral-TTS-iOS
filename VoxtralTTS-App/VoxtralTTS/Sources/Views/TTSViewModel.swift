@@ -178,8 +178,8 @@ class TTSViewModel: ObservableObject {
                 let result = model.generate(
                     textTokenIds: textTokenIds,
                     voiceEmbedding: voiceEmb,
-                    temperature: 0.0,
-                    topP: 1.0,
+                    temperature: 0.4,
+                    topP: 0.9,
                     maxAudioFrames: estimatedFrames,
                     progressCallback: { frame, total in
                         Task { @MainActor in

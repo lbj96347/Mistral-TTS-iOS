@@ -390,14 +390,13 @@ class Model(nn.Module):
 
         # Load voice embedding if specified
         voice_emb = None
+        self._current_voice_name = None  # Reset each call
         if voice is not None:
             voice_path = Path(voice)
             if voice_path.exists():
                 voice_emb = self.load_voice_embedding(voice)
-                # Store voice name for MistralTokenizer path
                 self._current_voice_name = voice_path.stem
             else:
-                # Treat as a voice name (for MistralTokenizer)
                 self._current_voice_name = voice
 
         # Build prompt with correct TTS template
@@ -440,45 +439,51 @@ class Model(nn.Module):
             input_embeds=input_embeds, cache=None,
         )
 
-        # Audio token range for logit masking
-        audio_start = audio_args.audio_token_id  # 24
-        audio_end = audio_start + AUDIO_CODE_OFFSET + audio_args.semantic_codebook_size  # 8218
-
         # Autoregressive audio frame generation
+        # Semantic tokens are predicted by the acoustic transformer's semantic head,
+        # NOT the LLM's output logits. The LLM only provides hidden states.
         all_semantic_codes = []
         all_acoustic_codes = []
-        past_audio_tokens = []
+        past_semantic_codes = []
+
+        # Precompute semantic logit mask: mask EMPTY(0) and padding (>= 2 + 8192)
+        n_valid_semantic = AUDIO_CODE_OFFSET + audio_args.semantic_codebook_size  # 2 + 8192 = 8194
+        semantic_mask = mx.full((1, self.acoustic_transformer.semantic_codebook_output.weight.shape[0]), -1e9)
+        # Unmask valid tokens: 1 (END) through n_valid_semantic-1
+        # Token 0 (EMPTY) stays masked to prevent premature termination
+        # Token 1 (END) is unmasked to allow natural termination
+        semantic_mask[:, 1:n_valid_semantic] = 0.0
 
         for frame_idx in range(max_audio_frames):
-            # Extract last logits and mask to audio token range only
-            last_logits = logits[:, -1, :]  # [B, vocab_size=131072]
+            # Get the last hidden state (post-norm) for the acoustic transformer
+            last_hidden = hidden_states[:, -1, :]  # [B, dim]
 
-            # Apply repetition penalty before masking
-            if repetition_penalty != 1.0 and past_audio_tokens:
-                last_logits = self._apply_repetition_penalty(
-                    last_logits, past_audio_tokens, repetition_penalty,
+            # Predict semantic token using acoustic transformer's semantic head
+            semantic_logits = self.acoustic_transformer.predict_semantic(last_hidden)  # [B, 8320]
+
+            # Mask invalid tokens: EMPTY(0) and padding (>= 8194)
+            semantic_logits = semantic_logits + semantic_mask
+
+            # Apply repetition penalty to semantic logits
+            if repetition_penalty != 1.0 and past_semantic_codes:
+                semantic_logits = self._apply_repetition_penalty(
+                    semantic_logits, past_semantic_codes, repetition_penalty,
                 )
 
-            # Slice to audio range [24..8218) — 8194 tokens
-            audio_logits = last_logits[:, audio_start:audio_end]  # [B, 8194]
-            relative_token = _sample_token(audio_logits, temperature, top_p)  # [B]
-            sem_token = relative_token + audio_start  # back to absolute vocab ID
+            # Reference uses argmax for semantic codes
+            sem_code_raw = mx.argmax(semantic_logits, axis=-1)  # [B]
 
-            # Check for end-of-audio: tokens 24 (EMPTY) or 25 (BEGIN_AUDIO) = stop
-            sem_code_raw = sem_token - audio_args.audio_token_id  # relative: 0 or 1 = special
+            # Check for end-of-audio: code 1 (END) = stop
             if mx.any(sem_code_raw < AUDIO_CODE_OFFSET).item():
                 if verbose:
                     print(f"  End-of-audio at frame {frame_idx}")
                 break
 
-            # Map from absolute LLM vocab token to semantic codebook index (0-8191)
-            sem_code = sem_token - audio_args.audio_token_id - AUDIO_CODE_OFFSET
+            # Map from raw semantic output to codebook index (0-8191)
+            sem_code = sem_code_raw - AUDIO_CODE_OFFSET
 
             # Track for repetition penalty
-            past_audio_tokens.append(sem_token.item())
-
-            # Get the last hidden state for the acoustic transformer
-            last_hidden = hidden_states[:, -1, :]  # [B, dim]
+            past_semantic_codes.append(sem_code_raw.item())
 
             # Stage 2: Flow matching to get acoustic codes
             acou_code = self.acoustic_transformer.decode_one_frame(last_hidden)  # [B, 36]
@@ -487,7 +492,7 @@ class Model(nn.Module):
             all_acoustic_codes.append(acou_code)
 
             # Encode audio codes back into embedding for next LLM step
-            audio_emb = self._encode_audio_frame(sem_code, acou_code)  # [B, dim]
+            audio_emb = self._encode_audio_frame(sem_code_raw, acou_code)  # [B, dim]
             audio_emb = audio_emb[:, None, :]  # [B, 1, dim]
 
             # Feed audio embedding directly into LLM (bypass token lookup)
@@ -527,31 +532,36 @@ class Model(nn.Module):
             segment_idx=0,
         )
 
-    def _encode_audio_frame(self, semantic_code: mx.array, acoustic_codes: mx.array) -> mx.array:
+    def _encode_audio_frame(self, semantic_code_raw: mx.array, acoustic_codes: mx.array) -> mx.array:
         """Encode one frame of audio codes into an embedding for the LLM.
 
-        The combined embedding table (audio_token_embedding.embeddings) is laid out as:
-        [sem_0..sem_8191, acou_0_0..acou_0_20, acou_1_0..acou_1_20, ..., acou_35_0..acou_35_20]
-        Total: 8192 + 36*21 = 8948 entries (padded to 9088)
+        The combined embedding table (audio_token_embedding.embeddings) layout:
+        [EMPTY, END, sem_0..sem_8191,                   <- 8194 entries (semantic)
+         EMPTY_0, END_0, acou_0_0..acou_0_20,           <- 23 entries (acoustic codebook 0)
+         EMPTY_1, END_1, acou_1_0..acou_1_20, ...]      <- 23 entries each
+        Total: 8194 + 36*23 = 9022 entries (padded to 9088)
 
         Args:
-            semantic_code: [B] semantic codebook index (0-8191)
+            semantic_code_raw: [B] raw semantic index (2-8193, includes special token offset)
             acoustic_codes: [B, 36] acoustic codebook indices (0-20 each)
 
         Returns:
             embedding: [B, dim] combined audio embedding (sum of all codebook embeddings)
         """
-        audio_args = self.config.get_audio_model_args()
         emb_table = self.audio_token_embedding.embeddings
 
-        # Semantic embedding: first 8192 entries
-        sem_emb = emb_table(semantic_code)  # [B, dim]
+        # Semantic embedding: raw code directly indexes the table (includes +2 offset)
+        sem_emb = emb_table(semantic_code_raw)  # [B, dim]
 
-        # Acoustic embeddings: each codebook k starts at offset 8192 + k*21
-        base_offset = audio_args.semantic_codebook_size
+        # Acoustic embeddings: each codebook k has 23 entries (2 special + 21 codes)
+        # starting at offset 8194 + k*23. Codes are offset by +2 for special tokens.
+        n_special = AUDIO_CODE_OFFSET  # 2
+        semantic_section_size = self.config.get_audio_model_args().semantic_codebook_size + n_special  # 8194
+        acoustic_codebook_stride = self.config.get_audio_model_args().acoustic_codebook_size + n_special  # 23
+
         acou_emb = mx.zeros_like(sem_emb)
         for k in range(acoustic_codes.shape[1]):
-            k_offset = base_offset + k * audio_args.acoustic_codebook_size
+            k_offset = semantic_section_size + k * acoustic_codebook_stride + n_special
             k_tokens = acoustic_codes[:, k] + k_offset
             acou_emb = acou_emb + emb_table(k_tokens)
 
