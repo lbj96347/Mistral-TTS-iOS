@@ -26,6 +26,19 @@ struct ContentView: View {
             .onAppear {
                 viewModel.checkAutoLoadArgument()
             }
+            #if os(iOS)
+            .sheet(isPresented: Binding(
+                get: { viewModel.shareURL != nil },
+                set: { if !$0 { viewModel.shareURL = nil } }
+            )) {
+                if let url = viewModel.shareURL {
+                    ActivityView(activityItems: [url]) {
+                        try? FileManager.default.removeItem(at: url)
+                        viewModel.shareURL = nil
+                    }
+                }
+            }
+            #endif
         }
     }
 

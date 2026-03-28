@@ -311,7 +311,7 @@ class TTSViewModel: ObservableObject {
 
     // MARK: - Save Audio
 
-    @Published var showingSaveDialog = false
+    @Published var shareURL: URL?
 
     func saveAudio() {
         #if os(macOS)
@@ -328,12 +328,14 @@ class TTSViewModel: ObservableObject {
             }
         }
         #else
-        // iOS: Save to Documents directory
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let fileURL = documentsURL.appendingPathComponent("voxtral_output.wav")
+        // iOS: Save to temp directory, then present share sheet
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent("voxtral_output.wav")
+        try? FileManager.default.removeItem(at: fileURL)
         do {
             try audioPlayer.saveToFile(url: fileURL)
             errorMessage = nil
+            shareURL = fileURL
         } catch {
             errorMessage = "Failed to save: \(error.localizedDescription)"
         }

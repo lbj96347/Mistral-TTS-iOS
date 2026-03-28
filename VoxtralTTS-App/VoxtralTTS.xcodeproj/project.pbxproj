@@ -56,6 +56,8 @@
 		F01BDD0B950E1E07642E134F /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
 		F2785F37BF9AF1CA4E48ED18 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */; };
 		F8F5EB474FF9C1348AC0BFB2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
+		D4E5F60718293A4B5CA1B2C3 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */; };
+		E5F60718293A4B5CA1B2C3D4 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -77,6 +79,7 @@
 		F246CA6A4A84DA800256F8AF /* TokenizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenizerTests.swift; sourceTree = "<group>"; };
 		F321BA304B97C38F813A9015 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F4ACC51DB12CE198B41B63C6 /* VoxtralTTSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralTTSApp.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +125,7 @@
 		3574C718F68EF3CB3DA35BF3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */,
 				F321BA304B97C38F813A9015 /* ContentView.swift */,
 				263BE8632366C3D85DEF66FD /* TTSViewModel.swift */,
 			);
@@ -326,6 +330,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4E5F60718293A4B5CA1B2C3 /* ActivityView.swift in Sources */,
 				9A1780E9A79B6B7B07A7BD47 /* AcousticTransformer.swift in Sources */,
 				A8AA37110B3F364A04230FC0 /* AudioPlayer.swift in Sources */,
 				D1CEB222F4F89E58E6F0ED51 /* ContentView.swift in Sources */,
@@ -364,6 +369,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E5F60718293A4B5CA1B2C3D4 /* ActivityView.swift in Sources */,
 				07DEAE1078A65E860DF91532 /* AcousticTransformer.swift in Sources */,
 				F01BDD0B950E1E07642E134F /* AudioPlayer.swift in Sources */,
 				7D730BE07D751065E555815F /* ContentView.swift in Sources */,
