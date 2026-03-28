@@ -20,25 +20,19 @@ Converts the HuggingFace model (~8GB) into MLX format with optional quantization
 
 > Text: *"Kimi Antonelli took his second pole position in a row as he beat Mercedes team-mate George Russell in qualifying at the Japanese Grand Prix..."*
 
-<audio controls src="audio_sample/voxtral_output.mp3"></audio>
-
-[voxtral_output.mp3](audio_sample/voxtral_output.mp3)
+https://github.com/lbj96347/Mistral-TTS-iOS/raw/main/audio_sample/voxtral_output.mp3
 
 **macOS — Q4 Model**
 
 > Same text as above
 
-<audio controls src="audio_sample/voxtral_output_q4.mp3"></audio>
-
-[voxtral_output_q4.mp3](audio_sample/voxtral_output_q4.mp3)
+https://github.com/lbj96347/Mistral-TTS-iOS/raw/main/audio_sample/voxtral_output_q4.mp3
 
 **iPhone 15 Pro — Q2 Model**
 
 > Text: *"Good morning! Nice to see you again!"*
 
-<audio controls src="audio_sample/voxtral_output_iPhone.mp3"></audio>
-
-[voxtral_output_iPhone.wav](audio_sample/voxtral_output_iPhone.wav)
+https://github.com/lbj96347/Mistral-TTS-iOS/raw/main/audio_sample/voxtral_output_iPhone.wav
 
 ## Architecture
 
