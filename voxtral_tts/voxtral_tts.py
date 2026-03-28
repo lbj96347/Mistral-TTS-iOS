@@ -47,14 +47,28 @@ EMPTY_AUDIO_ID = 0
 END_AUDIO_ID = 1
 AUDIO_CODE_OFFSET = 2  # Actual codes start after special tokens
 
+# Special token IDs from the Tekken tokenizer (absolute IDs)
+BOS_TOKEN_ID = 1
+AUDIO_TOKEN_ID = 24           # [AUDIO] — voice embedding placeholder
+BEGIN_AUDIO_TOKEN_ID = 25     # [BEGIN_AUDIO] — audio section marker
+AUDIO_TO_TEXT_TOKEN_ID = 35   # [REPEAT_AUDIO_TEXT] — transition from text to audio generation
+TEXT_TO_AUDIO_TOKEN_ID = 36   # [NEXT_AUDIO_TEXT] — transition from voice to text
+
 
 def load_tokenizer(model_path: Path):
-    """Load the Tekken tokenizer from a model directory.
+    """Load the MistralTokenizer from a model directory.
 
-    Falls back to HuggingFace AutoTokenizer if mistral_common is not available.
+    Returns a MistralTokenizer which supports encode_speech_request() for
+    proper TTS prompt formatting. Falls back to raw Tekkenizer if
+    MistralTokenizer is not available.
     """
     tekken_path = model_path / "tekken.json"
     if tekken_path.exists():
+        try:
+            from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+            return MistralTokenizer.from_file(str(tekken_path))
+        except ImportError:
+            pass
         try:
             from mistral_common.tokens.tokenizers.tekken import Tekken
             return Tekken.from_file(str(tekken_path))
@@ -142,13 +156,19 @@ def _sample_token(logits: mx.array, temperature: float = 0.0, top_p: float = 1.0
     logits = logits / temperature
 
     if top_p < 1.0:
+        # Sort descending
         sorted_indices = mx.argsort(-logits, axis=-1)
         sorted_logits = mx.take_along_axis(logits, sorted_indices, axis=-1)
-        cumulative_probs = mx.cumsum(mx.softmax(sorted_logits, axis=-1), axis=-1)
-        mask = cumulative_probs - mx.softmax(sorted_logits, axis=-1) >= top_p
+        sorted_probs = mx.softmax(sorted_logits, axis=-1)
+        cumulative_probs = mx.cumsum(sorted_probs, axis=-1)
+        # Mask tokens beyond top-p threshold (keep first token always)
+        mask = (cumulative_probs - sorted_probs) >= top_p
         sorted_logits = mx.where(mask, mx.array(-float("inf")), sorted_logits)
-        logits = mx.zeros_like(logits)
-        logits = logits.at[mx.arange(logits.shape[0])[:, None], sorted_indices].set(sorted_logits)
+        # Sample from sorted space, then map back to original indices
+        sampled_sorted = mx.random.categorical(sorted_logits, axis=-1)  # [B]
+        return mx.take_along_axis(
+            sorted_indices, sampled_sorted[:, None], axis=-1,
+        ).squeeze(-1)
 
     return mx.random.categorical(logits, axis=-1)
 
@@ -225,7 +245,8 @@ class Model(nn.Module):
         if voice_path not in self._voice_embeddings:
             import torch
             data = torch.load(voice_path, map_location="cpu", weights_only=True)
-            self._voice_embeddings[voice_path] = mx.array(data.numpy())
+            # Voice embeddings may be BFloat16 — convert to float32 for numpy
+            self._voice_embeddings[voice_path] = mx.array(data.float().numpy())
         return self._voice_embeddings[voice_path]
 
     def _make_generation_result(
@@ -263,15 +284,69 @@ class Model(nn.Module):
             peak_memory_usage=mx.get_peak_memory() / 1e9,
         )
 
-    def _tokenize_text(self, text: str, tokenizer) -> mx.array:
-        """Tokenize text for the LLM.
+    def _build_prompt(
+        self, text: str, tokenizer, voice_emb: Optional[mx.array] = None,
+    ) -> mx.array:
+        """Build the TTS prompt token sequence.
 
-        The Tekken tokenizer handles the text encoding. We need to wrap
-        the text with appropriate control tokens for TTS.
+        Correct format (from mistral_common encode_speech_request):
+          [BOS] [BEGIN_AUDIO] [AUDIO]*N [TEXT_TO_AUDIO] text_tokens [AUDIO_TO_TEXT] [BEGIN_AUDIO]
+
+        Where [AUDIO]*N are placeholder positions replaced by voice embeddings.
         """
-        # Format: [BOS] text [AUDIO] ... generate audio tokens ...
-        tokens = tokenizer.encode(text, add_special_tokens=True)
+        # Try MistralTokenizer.encode_speech_request() first
+        try:
+            from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
+            from mistral_common.protocol.speech.request import SpeechRequest
+            if isinstance(tokenizer, MistralTokenizer):
+                # Determine voice name from embedding or use a default
+                voice_name = getattr(self, '_current_voice_name', None)
+                if voice_name:
+                    req = SpeechRequest(input=text, voice=voice_name)
+                    result = tokenizer.encode_speech_request(req)
+                    return mx.array([result.tokens])
+        except (ImportError, Exception):
+            pass
+
+        # Manual prompt construction (also used by Swift side)
+        # Get text tokens without BOS/EOS
+        if hasattr(tokenizer, 'instruct_tokenizer'):
+            # MistralTokenizer wrapper — access underlying Tekkenizer
+            raw_tok = tokenizer.instruct_tokenizer.tokenizer
+            text_tokens = raw_tok.encode(text, bos=False, eos=False)
+        elif hasattr(tokenizer, 'encode') and 'bos' in str(type(tokenizer)):
+            text_tokens = tokenizer.encode(text, bos=False, eos=False)
+        else:
+            # HuggingFace fallback
+            text_tokens = tokenizer.encode(text, add_special_tokens=False)
+
+        # Number of voice embedding positions
+        n_voice = voice_emb.shape[0] if voice_emb is not None and voice_emb.ndim >= 1 else 0
+
+        # Build: [BOS, BEGIN_AUDIO, AUDIO*N, TEXT_TO_AUDIO, *text, AUDIO_TO_TEXT, BEGIN_AUDIO]
+        tokens = [BOS_TOKEN_ID, BEGIN_AUDIO_TOKEN_ID]
+        tokens.extend([AUDIO_TOKEN_ID] * n_voice)
+        tokens.append(TEXT_TO_AUDIO_TOKEN_ID)
+        tokens.extend(text_tokens)
+        tokens.append(AUDIO_TO_TEXT_TOKEN_ID)
+        tokens.append(BEGIN_AUDIO_TOKEN_ID)
+
         return mx.array([tokens])
+
+    @staticmethod
+    def _apply_repetition_penalty(
+        logits: mx.array, past_tokens: List[int], penalty: float,
+    ) -> mx.array:
+        """Apply repetition penalty to logits for previously generated tokens."""
+        if penalty == 1.0 or not past_tokens:
+            return logits
+        unique_tokens = list(set(past_tokens))
+        indices = mx.array(unique_tokens)
+        scores = logits[:, indices]
+        # If score > 0 divide by penalty, if < 0 multiply by penalty
+        penalized = mx.where(scores > 0, scores / penalty, scores * penalty)
+        logits[:, indices] = penalized
+        return logits
 
     def generate(
         self,
@@ -288,9 +363,11 @@ class Model(nn.Module):
         """Generate speech from text.
 
         The correct generation flow:
-        1. LLM processes text tokens, then autoregressively generates semantic tokens
-        2. For each semantic token, flow-matching generates 36 acoustic tokens
-        3. All codes are decoded to waveform by the codec
+        1. Build prompt: [BOS][BEGIN_AUDIO][AUDIO]*N[TEXT_TO_AUDIO] text [AUDIO_TO_TEXT][BEGIN_AUDIO]
+        2. Replace [AUDIO] positions with voice embeddings, forward through LLM
+        3. Autoregressively generate semantic tokens (masked to audio vocab)
+        4. For each semantic token, flow-matching generates 36 acoustic tokens
+        5. All codes are decoded to waveform by the codec
 
         Args:
             text: Input text to synthesize
@@ -311,45 +388,94 @@ class Model(nn.Module):
         start_time = time.perf_counter()
         audio_args = self.config.get_audio_model_args()
 
-        # Prepare input tokens
-        input_ids = self._tokenize_text(text, tokenizer)
-        B = input_ids.shape[0]
-
-        # Prepend voice embedding if specified
+        # Load voice embedding if specified
         voice_emb = None
         if voice is not None:
-            voice_emb = self.load_voice_embedding(voice)
-            # voice_emb is [T_voice, dim], expand to [B, T_voice, dim]
-            if voice_emb.ndim == 2:
-                voice_emb = voice_emb[None, :, :].broadcast_to((B,) + voice_emb.shape)
+            voice_path = Path(voice)
+            if voice_path.exists():
+                voice_emb = self.load_voice_embedding(voice)
+                # Store voice name for MistralTokenizer path
+                self._current_voice_name = voice_path.stem
+            else:
+                # Treat as a voice name (for MistralTokenizer)
+                self._current_voice_name = voice
 
-        # Stage 1: Initial forward pass with text tokens
-        cache = None
+        # Build prompt with correct TTS template
+        input_ids = self._build_prompt(text, tokenizer, voice_emb)
+        B = input_ids.shape[0]
+
+        if verbose:
+            print(f"  Prompt tokens: {input_ids.shape[1]}, "
+                  f"voice positions: {voice_emb.shape[0] if voice_emb is not None else 0}")
+
+        # Build input embeddings: token embeddings with voice embeddings at [AUDIO] positions
+        token_embs = self.language_model.tok_embeddings(input_ids)  # [B, T, dim]
+
         if voice_emb is not None:
-            # First process voice conditioning through the LLM
-            _, _, cache = self.language_model(input_embeds=voice_emb, cache=cache)
+            # voice_emb is [N, dim] — expand to [B, N, dim]
+            if voice_emb.ndim == 2:
+                voice_emb_expanded = voice_emb[None, :, :]  # [1, N, dim]
+            else:
+                voice_emb_expanded = voice_emb
 
-        # Process text tokens
-        logits, hidden_states, cache = self.language_model(tokens=input_ids, cache=cache)
+            n_voice = voice_emb.shape[0] if voice_emb.ndim == 2 else voice_emb.shape[1]
 
-        # Now generate audio frames autoregressively
-        # The LLM generates semantic tokens; the acoustic transformer generates acoustic codes
+            # [AUDIO] positions are contiguous starting at index 2
+            # (after BOS=1 and BEGIN_AUDIO=25)
+            first_audio_pos = 2
+            last_audio_pos = first_audio_pos + n_voice
+
+            # Slice: [before_audio | voice_emb | after_audio]
+            before = token_embs[:, :first_audio_pos, :]
+            after = token_embs[:, last_audio_pos:, :]
+            voice_block = mx.broadcast_to(
+                voice_emb_expanded, (B, n_voice, token_embs.shape[-1])
+            )
+            input_embeds = mx.concatenate([before, voice_block, after], axis=1)
+        else:
+            input_embeds = token_embs
+
+        # Stage 1: Forward pass with combined embeddings (single pass)
+        logits, hidden_states, cache = self.language_model(
+            input_embeds=input_embeds, cache=None,
+        )
+
+        # Audio token range for logit masking
+        audio_start = audio_args.audio_token_id  # 24
+        audio_end = audio_start + AUDIO_CODE_OFFSET + audio_args.semantic_codebook_size  # 8218
+
+        # Autoregressive audio frame generation
         all_semantic_codes = []
         all_acoustic_codes = []
+        past_audio_tokens = []
 
         for frame_idx in range(max_audio_frames):
-            # Sample semantic token from LLM logits
-            # The semantic token vocabulary is a subset of the LLM vocab
-            # (audio_token_id marks where audio tokens start in the LLM vocab)
-            last_logits = logits[:, -1, :]  # [B, vocab_size]
-            sem_token = _sample_token(last_logits, temperature, top_p)  # [B]
+            # Extract last logits and mask to audio token range only
+            last_logits = logits[:, -1, :]  # [B, vocab_size=131072]
 
-            # Check for end-of-audio token
-            if mx.any(sem_token == audio_args.audio_token_id + END_AUDIO_ID).item():
+            # Apply repetition penalty before masking
+            if repetition_penalty != 1.0 and past_audio_tokens:
+                last_logits = self._apply_repetition_penalty(
+                    last_logits, past_audio_tokens, repetition_penalty,
+                )
+
+            # Slice to audio range [24..8218) — 8194 tokens
+            audio_logits = last_logits[:, audio_start:audio_end]  # [B, 8194]
+            relative_token = _sample_token(audio_logits, temperature, top_p)  # [B]
+            sem_token = relative_token + audio_start  # back to absolute vocab ID
+
+            # Check for end-of-audio: tokens 24 (EMPTY) or 25 (BEGIN_AUDIO) = stop
+            sem_code_raw = sem_token - audio_args.audio_token_id  # relative: 0 or 1 = special
+            if mx.any(sem_code_raw < AUDIO_CODE_OFFSET).item():
+                if verbose:
+                    print(f"  End-of-audio at frame {frame_idx}")
                 break
 
-            # Map from LLM vocab token to semantic codebook index
+            # Map from absolute LLM vocab token to semantic codebook index (0-8191)
             sem_code = sem_token - audio_args.audio_token_id - AUDIO_CODE_OFFSET
+
+            # Track for repetition penalty
+            past_audio_tokens.append(sem_token.item())
 
             # Get the last hidden state for the acoustic transformer
             last_hidden = hidden_states[:, -1, :]  # [B, dim]

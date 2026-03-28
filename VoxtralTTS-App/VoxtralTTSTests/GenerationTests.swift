@@ -17,9 +17,8 @@ final class GenerationTests: XCTestCase {
 
     // MARK: - Helper
 
-    private func tokenize(_ text: String) -> MLXArray {
-        let ids = tokenizer.encode(text)
-        return MLXArray(ids.map { Int32($0) }).reshaped(1, -1)
+    private func tokenize(_ text: String) -> [Int32] {
+        return tokenizer.encode(text).map { Int32($0) }
     }
 
     private func assertValidResult(
@@ -41,13 +40,13 @@ final class GenerationTests: XCTestCase {
 
     func testGenerateSimpleEnglish() {
         let input = tokenize("Hello world")
-        let result = model.generate(tokenIds: input, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, maxAudioFrames: 50)
         assertValidResult(result)
     }
 
     func testGenerateSingleWord() {
         let input = tokenize("Yes")
-        let result = model.generate(tokenIds: input, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, maxAudioFrames: 50)
         // Single word may produce fewer frames but should still work
         assertValidResult(result)
     }
@@ -55,13 +54,13 @@ final class GenerationTests: XCTestCase {
     func testGenerateLongSentence() {
         let text = "The quick brown fox jumps over the lazy dog, and then it ran across the field while barking loudly at the birds flying overhead."
         let input = tokenize(text)
-        let result = model.generate(tokenIds: input, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, maxAudioFrames: 50)
         assertValidResult(result)
     }
 
     func testGenerateNumbers() {
         let input = tokenize("One two three four five")
-        let result = model.generate(tokenIds: input, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, maxAudioFrames: 50)
         assertValidResult(result)
     }
 
@@ -84,7 +83,7 @@ final class GenerationTests: XCTestCase {
 
         let voiceEmb = model.loadVoiceEmbedding(from: voiceFile)
         let input = tokenize("Hello world")
-        let result = model.generate(tokenIds: input, voiceEmbedding: voiceEmb, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, voiceEmbedding: voiceEmb, maxAudioFrames: 50)
         assertValidResult(result)
     }
 
@@ -93,7 +92,7 @@ final class GenerationTests: XCTestCase {
     func testGenerateUnicode() {
         let input = tokenize("Bonjour le monde")
         // May not produce great audio for non-English but must not crash
-        let result = model.generate(tokenIds: input, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, maxAudioFrames: 50)
         // Result can be nil (model may not handle French), but no crash is the key assertion
         if let result = result {
             XCTAssertGreaterThan(result.audio.dim(0), 0)
@@ -103,12 +102,12 @@ final class GenerationTests: XCTestCase {
     func testGenerateEmoji() {
         let input = tokenize("Hello \u{1F30D}")
         // Must not crash. Result may be nil.
-        let _ = model.generate(tokenIds: input, maxAudioFrames: 30)
+        let _ = model.generate(textTokenIds: input, maxAudioFrames: 30)
     }
 
     func testGenerateSpecialCharacters() {
         let input = tokenize("Hello... world!!! How are you???")
-        let result = model.generate(tokenIds: input, maxAudioFrames: 50)
+        let result = model.generate(textTokenIds: input, maxAudioFrames: 50)
         if let result = result {
             XCTAssertGreaterThan(result.audio.dim(0), 0)
         }
@@ -117,7 +116,7 @@ final class GenerationTests: XCTestCase {
     func testGenerateVeryShortInput() {
         let input = tokenize("A")
         // Single character -- must not crash
-        let _ = model.generate(tokenIds: input, maxAudioFrames: 30)
+        let _ = model.generate(textTokenIds: input, maxAudioFrames: 30)
     }
 
     // MARK: - Random Strings
@@ -134,10 +133,10 @@ final class GenerationTests: XCTestCase {
             let tokens = tokenizer.encode(randomText)
             XCTAssertFalse(tokens.isEmpty, "Tokenization failed for random string \(i)")
 
-            let inputArray = MLXArray(tokens.map { Int32($0) }).reshaped(1, -1)
+            let textTokenIds = tokens.map { Int32($0) }
 
             // Generation must not crash -- result can be nil
-            let _ = model.generate(tokenIds: inputArray, maxAudioFrames: 20)
+            let _ = model.generate(textTokenIds: textTokenIds, maxAudioFrames: 20)
         }
     }
 
@@ -148,7 +147,7 @@ final class GenerationTests: XCTestCase {
         var callbackFrames: [Int] = []
 
         let _ = model.generate(
-            tokenIds: input,
+            textTokenIds: input,
             maxAudioFrames: 50,
             progressCallback: { frame, total in
                 callbackFrames.append(frame)
@@ -167,7 +166,7 @@ final class GenerationTests: XCTestCase {
 
     func testGenerateAudioSampleValues() {
         let input = tokenize("Hello world, this is a test of audio generation.")
-        guard let result = model.generate(tokenIds: input, maxAudioFrames: 50) else {
+        guard let result = model.generate(textTokenIds: input, maxAudioFrames: 50) else {
             XCTFail("Generation returned nil for valid input")
             return
         }
@@ -194,7 +193,7 @@ final class GenerationTests: XCTestCase {
 
     func testGenerateStatsConsistency() {
         let input = tokenize("Testing generation statistics")
-        guard let result = model.generate(tokenIds: input, maxAudioFrames: 50) else {
+        guard let result = model.generate(textTokenIds: input, maxAudioFrames: 50) else {
             XCTFail("Generation returned nil")
             return
         }

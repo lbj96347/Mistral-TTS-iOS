@@ -131,9 +131,9 @@ class TTSViewModel: ObservableObject {
             guard let self = self else { return }
 
             do {
-                // Tokenize
+                // Tokenize text only (no BOS/EOS — prompt building adds control tokens)
                 let tokenIds = tokenizer.encode(inputText)
-                let inputArray = MLXArray(tokenIds.map { Int32($0) }).reshaped(1, -1)
+                let textTokenIds = tokenIds.map { Int32($0) }
 
                 // Load voice embedding if selected
                 var voiceEmb: MLXArray? = nil
@@ -146,9 +146,9 @@ class TTSViewModel: ObservableObject {
                     }
                 }
 
-                // Generate
+                // Generate with correct TTS prompt template
                 let result = model.generate(
-                    tokenIds: inputArray,
+                    textTokenIds: textTokenIds,
                     voiceEmbedding: voiceEmb,
                     temperature: 0.0,
                     topP: 1.0,

@@ -22,6 +22,13 @@ let EMPTY_AUDIO_ID = 0
 let END_AUDIO_ID = 1
 let AUDIO_CODE_OFFSET = 2
 
+// Special token IDs from the Tekken tokenizer (absolute IDs)
+let BOS_TOKEN_ID: Int32 = 1
+let AUDIO_TOKEN_ID: Int32 = 24          // [AUDIO] — voice embedding placeholder
+let BEGIN_AUDIO_TOKEN_ID: Int32 = 25    // [BEGIN_AUDIO] — audio section marker
+let AUDIO_TO_TEXT_TOKEN_ID: Int32 = 35  // [REPEAT_AUDIO_TEXT]
+let TEXT_TO_AUDIO_TOKEN_ID: Int32 = 36  // [NEXT_AUDIO_TEXT]
+
 // MARK: - Sampling
 
 func sampleToken(_ logits: MLXArray, temperature: Float = 0.0, topP: Float = 1.0) -> MLXArray {
@@ -107,61 +114,108 @@ class VoxtralTTSModel: Module {
         return semEmb + acouEmb
     }
 
+    // MARK: - Prompt Building
+
+    /// Build TTS prompt: [BOS][BEGIN_AUDIO][AUDIO]*N[TEXT_TO_AUDIO] text [AUDIO_TO_TEXT][BEGIN_AUDIO]
+    func buildPrompt(textTokenIds: [Int32], nVoiceTokens: Int) -> MLXArray {
+        var tokens: [Int32] = [BOS_TOKEN_ID, BEGIN_AUDIO_TOKEN_ID]
+        tokens.append(contentsOf: [Int32](repeating: AUDIO_TOKEN_ID, count: nVoiceTokens))
+        tokens.append(TEXT_TO_AUDIO_TOKEN_ID)
+        tokens.append(contentsOf: textTokenIds)
+        tokens.append(AUDIO_TO_TEXT_TOKEN_ID)
+        tokens.append(BEGIN_AUDIO_TOKEN_ID)
+        return MLXArray(tokens).reshaped(1, -1)
+    }
+
     // MARK: - Generation
 
     func generate(
-        tokenIds: MLXArray,
+        textTokenIds: [Int32],
         voiceEmbedding: MLXArray? = nil,
         temperature: Float = 0.0,
         topP: Float = 1.0,
         maxAudioFrames: Int = 2048,
+        repetitionPenalty: Float = 1.1,
         progressCallback: ((Int, Int) -> Void)? = nil,
         shouldCancel: (() -> Bool)? = nil
     ) -> GenerationResult? {
         let startTime = CFAbsoluteTimeGetCurrent()
         let audioConfig = config.audioConfig
+
+        // Build prompt with correct TTS template
+        let nVoice = voiceEmbedding?.dim(0) ?? 0
+        let tokenIds = buildPrompt(textTokenIds: textTokenIds, nVoiceTokens: nVoice)
         let B = tokenIds.dim(0)
 
-        // Stage 1: Initial forward pass
-        var cache: [(MLXArray, MLXArray)]? = nil
+        // Build input embeddings: token embeddings with voice at [AUDIO] positions
+        var inputEmbeds = languageModel.tokEmbeddings(tokenIds)  // [B, T, dim]
 
-        // Process voice conditioning if provided
-        if let voiceEmb = voiceEmbedding {
-            let expanded = voiceEmb.ndim == 2
-                ? voiceEmb.expandedDimensions(axis: 0)
+        if let voiceEmb = voiceEmbedding, nVoice > 0 {
+            let voiceExpanded = voiceEmb.ndim == 2
+                ? voiceEmb.expandedDimensions(axis: 0)  // [1, N, dim]
                 : voiceEmb
-            let result = languageModel(tokens: nil, cache: nil, inputEmbeds: expanded)
-            cache = result.newCache
+
+            // [AUDIO] positions start at index 2 (after BOS, BEGIN_AUDIO)
+            let firstAudioPos = 2
+            let lastAudioPos = firstAudioPos + nVoice
+
+            let before = inputEmbeds[0..., ..<firstAudioPos, 0...]
+            let after = inputEmbeds[0..., lastAudioPos..., 0...]
+            let voiceBlock = MLX.broadcast(voiceExpanded, to: [B, nVoice, config.dim])
+            inputEmbeds = MLX.concatenated([before, voiceBlock, after], axis: 1)
         }
 
-        // Process text tokens
-        var result = languageModel(tokens: tokenIds, cache: cache)
+        // Stage 1: Single forward pass with combined embeddings
+        var result = languageModel(tokens: nil, cache: nil, inputEmbeds: inputEmbeds)
         var logits = result.logits
         var hiddenStates = result.hiddenStates
-        cache = result.newCache
+        var cache = result.newCache
+
+        // Audio token range for logit masking
+        let audioStart = audioConfig.audioTokenId       // 24
+        let audioEnd = audioStart + AUDIO_CODE_OFFSET + audioConfig.semanticCodebookSize  // 8218
 
         // Autoregressive audio generation
         var allSemanticCodes: [MLXArray] = []
         var allAcousticCodes: [MLXArray] = []
+        var pastAudioTokens: [Int32] = []
 
         for frameIdx in 0 ..< maxAudioFrames {
-            // Check cancellation
-            if shouldCancel?() == true {
+            if shouldCancel?() == true { break }
+
+            // Extract last logits and mask to audio token range
+            var lastLogits = logits[0..., -1, 0...]  // [B, vocab_size]
+
+            // Apply repetition penalty via mask
+            if repetitionPenalty != 1.0 && !pastAudioTokens.isEmpty {
+                let uniqueTokens = Array(Set(pastAudioTokens))
+                var penaltyValues = [Float](repeating: 1.0, count: lastLogits.dim(1))
+                for tokenId in uniqueTokens {
+                    let idx = Int(tokenId)
+                    if idx < penaltyValues.count {
+                        let score: Float = lastLogits[0, idx].item()
+                        penaltyValues[idx] = score > 0 ? (1.0 / repetitionPenalty) : repetitionPenalty
+                    }
+                }
+                let penaltyMask = MLXArray(penaltyValues).reshaped(1, -1)
+                lastLogits = lastLogits * penaltyMask
+            }
+
+            // Slice to audio range [24..8218)
+            let audioLogits = lastLogits[0..., audioStart..<audioEnd]  // [B, 8194]
+            let relativeToken = sampleToken(audioLogits, temperature: temperature, topP: topP)
+            let semToken = relativeToken + Int32(audioStart)
+
+            // Check end-of-audio: relative token 0 or 1 = special (EMPTY or BEGIN_AUDIO)
+            if MLX.any(relativeToken .< Int32(AUDIO_CODE_OFFSET)).item(Bool.self) {
                 break
             }
 
-            // Sample semantic token from LLM
-            let lastLogits = logits[0..., -1, 0...]
-            let semToken = sampleToken(lastLogits, temperature: temperature, topP: topP)
-
-            // Check end-of-audio
-            let endToken = MLXArray(Int32(audioConfig.audioTokenId + END_AUDIO_ID))
-            if MLX.any(semToken .== endToken).item(Bool.self) {
-                break
-            }
-
-            // Map to semantic codebook index
+            // Map to semantic codebook index (0-8191)
             let semCode = semToken - Int32(audioConfig.audioTokenId + AUDIO_CODE_OFFSET)
+
+            // Track for repetition penalty
+            pastAudioTokens.append(semToken[0].item(Int32.self))
 
             // Stage 2: Flow matching for acoustic codes
             let lastHidden = hiddenStates[0..., -1, 0...]
@@ -181,7 +235,6 @@ class VoxtralTTSModel: Module {
             cache = result.newCache
 
             eval(semCode, acouCode)
-
             progressCallback?(frameIdx, maxAudioFrames)
         }
 
@@ -193,7 +246,7 @@ class VoxtralTTSModel: Module {
 
         // Stage 3: Decode to waveform
         var audio = audioTokenizer.decode(semanticCodes: semanticCodes, acousticCodes: acousticCodes)
-        audio = audio[0]  // First batch item
+        audio = audio[0]
         eval(audio)
 
         let elapsed = Float(CFAbsoluteTimeGetCurrent() - startTime)
