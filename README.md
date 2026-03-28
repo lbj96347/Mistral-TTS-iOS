@@ -39,16 +39,49 @@ python3 -m voxtral_tts.convert --inspect
 
 ### 2. Convert model to MLX format
 
+#### Quick build (recommended)
+
+Use the build script to convert and prepare models with voice embeddings in one step:
+
+```bash
+# Build all three variants (fp16, q4, q2)
+./scripts/build_models.sh
+
+# Build specific variants
+./scripts/build_models.sh q4           # Uniform Q4 only
+./scripts/build_models.sh q4 q2        # Q4 and mixed Q4+Q2
+./scripts/build_models.sh fp16         # Full precision only
+
+# Use a local HF model directory (skip download)
+./scripts/build_models.sh q4 --local-dir /path/to/Voxtral-4B-TTS-2603
+
+# Preview commands without running
+./scripts/build_models.sh --dry-run
+```
+
+This produces:
+
+| Directory | Quantization | Size | Use case |
+|---|---|---|---|
+| `mlx_model/` | None (fp16) | ~8 GB | Development / best quality |
+| `mlx_model_q4/` | Uniform Q4 | ~2.1 GB | Mac (8GB+ RAM) |
+| `mlx_model_q2/` | Q4 LLM/acoustic + Q2 codec | ~1.6 GB | iPhone / iPad |
+
+#### Manual conversion
+
 ```bash
 # Full precision
 python3 -m voxtral_tts.convert --output-dir mlx_model
 
 # With uniform quantization (q2, q4, q6, q8)
-python3 -m voxtral_tts.convert --output-dir mlx_model --quantize q4
+python3 -m voxtral_tts.convert --output-dir mlx_model_q4 --quantize q4
 
 # Mixed quantization for iOS (Q4 LLM/acoustic, Q2 codec for size savings)
-python3 -m voxtral_tts.convert --output-dir mlx_model_ios \
+python3 -m voxtral_tts.convert --output-dir mlx_model_q2 \
     --quantize-llm q4 --quantize-acoustic q4 --quantize-codec q2
+
+# Convert voice embeddings (.pt → .safetensors) for iOS compatibility
+python3 -m voxtral_tts.convert_voices mlx_model_q4
 ```
 
 #### Quantization Guide
@@ -98,22 +131,25 @@ The iOS app includes several optimizations to fit within iOS jetsam memory limit
 
 ### Running on iOS
 
-1. Convert the model with iOS-optimized quantization (see Quantization Guide above)
-2. Copy the output directory (e.g., `mlx_model_ios/`) to your device
+1. Build the iOS-optimized model: `./scripts/build_models.sh q2`
+2. Copy `mlx_model_q2/` to your device
 3. Open the Xcode project and build for your device (simulator is not supported — MLX requires Metal GPU)
 4. Select the model directory in the app and generate
 
 ## Project Structure
 
 ```
+scripts/
+└── build_models.sh              # Build all model variants (fp16, q4, q2)
 voxtral_tts/
-├── voxtral_tts.py            # Main model: generate() + load()
-├── transformer_decoder.py    # LLM decoder (Mistral-based)
-├── acoustic_transformer.py   # Flow-matching acoustic model
-├── codec.py                  # Audio codec (codes → waveform)
-├── config.py                 # Model configuration dataclasses
-├── convert.py                # HF → MLX weight converter
-└── test_model.py             # Construction/loading/weight tests
+├── voxtral_tts.py               # Main model: generate() + load()
+├── transformer_decoder.py       # LLM decoder (Mistral-based)
+├── acoustic_transformer.py      # Flow-matching acoustic model
+├── codec.py                     # Audio codec (codes → waveform)
+├── config.py                    # Model configuration dataclasses
+├── convert.py                   # HF → MLX weight converter
+├── convert_voices.py            # .pt → .safetensors voice converter
+└── test_model.py                # Construction/loading/weight tests
 ```
 
 ## Dependencies
