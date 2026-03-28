@@ -1,6 +1,7 @@
 import SwiftUI
 import MLX
 import Foundation
+import Combine
 
 @MainActor
 class TTSViewModel: ObservableObject {
@@ -30,6 +31,15 @@ class TTSViewModel: ObservableObject {
 
     // Audio
     let audioPlayer = AudioPlayer(sampleRate: 24000)
+    private var audioPlayerCancellable: AnyCancellable?
+
+    init() {
+        audioPlayerCancellable = audioPlayer.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+    }
 
     // Persistence
     private let modelPathKey = "VoxtralTTS.modelPath"

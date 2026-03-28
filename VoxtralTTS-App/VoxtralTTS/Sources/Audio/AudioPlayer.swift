@@ -74,8 +74,13 @@ class AudioPlayer: ObservableObject {
 
         player.scheduleBuffer(buffer) { [weak self] in
             DispatchQueue.main.async {
+                self?.playerNode?.stop()
+                self?.audioEngine?.stop()
+                self?.playerNode = nil
+                self?.audioEngine = nil
                 self?.isPlaying = false
                 self?.stopTimer()
+                self?.currentTime = 0
             }
         }
 
