@@ -19,6 +19,8 @@ class TTSViewModel: ObservableObject {
     @Published var maxFrames = 2048
     @Published var generationStats: GenerationStats?
     @Published var showingDirectoryPicker = false
+    @Published var currentChunk = 0
+    @Published var totalChunks = 1
 
     // Model
     private var model: VoxtralTTSModel?
@@ -157,22 +159,21 @@ class TTSViewModel: ObservableObject {
         guard !inputText.isEmpty else { return }
 
         let estimatedFrames = estimateMaxFrames(for: inputText)
+        let chunks = splitTextIntoChunks(inputText)
 
         isGenerating = true
         errorMessage = nil
         generationProgress = 0
         currentFrame = 0
         maxFrames = estimatedFrames
+        currentChunk = 0
+        totalChunks = chunks.count
         generationStats = nil
 
-        generationTask = Task.detached { [weak self, inputText, selectedVoice, estimatedFrames] in
+        generationTask = Task.detached { [weak self, inputText, selectedVoice, estimatedFrames, chunks] in
             guard let self = self else { return }
 
             do {
-                // Tokenize text only (no BOS/EOS — prompt building adds control tokens)
-                let tokenIds = tokenizer.encode(inputText, addSpecialTokens: false)
-                let textTokenIds = tokenIds.map { Int32($0) }
-
                 // Load voice embedding if selected
                 var voiceEmb: MLXArray? = nil
                 if !selectedVoice.isEmpty, let modelPath = await self.modelPath {
@@ -184,24 +185,53 @@ class TTSViewModel: ObservableObject {
                     }
                 }
 
-                // Generate with correct TTS prompt template
-                let result = model.generate(
-                    textTokenIds: textTokenIds,
-                    voiceEmbedding: voiceEmb,
-                    temperature: 0.4,
-                    topP: 0.9,
-                    maxAudioFrames: estimatedFrames,
-                    progressCallback: { frame, total in
-                        Task { @MainActor in
-                            self.currentFrame = frame
-                            self.maxFrames = total
-                            self.generationProgress = Double(frame) / Double(total)
+                let result: GenerationResult?
+
+                if chunks.count > 1 {
+                    // Multi-chunk: generate each chunk separately, concatenate audio
+                    result = model.generateChunked(
+                        text: inputText,
+                        tokenizer: tokenizer,
+                        voiceEmbedding: voiceEmb,
+                        temperature: 0.4,
+                        topP: 0.9,
+                        maxAudioFrames: estimatedFrames,
+                        progressCallback: { chunkIdx, chunkCount, frame, total in
+                            Task { @MainActor in
+                                self.currentChunk = chunkIdx
+                                self.totalChunks = chunkCount
+                                self.currentFrame = frame
+                                self.maxFrames = total
+                                self.generationProgress = (Double(chunkIdx) + Double(frame) / Double(max(total, 1))) / Double(chunkCount)
+                            }
+                        },
+                        shouldCancel: {
+                            Task.isCancelled
                         }
-                    },
-                    shouldCancel: {
-                        Task.isCancelled
-                    }
-                )
+                    )
+                } else {
+                    // Single chunk: use existing direct path
+                    let tokenIds = tokenizer.encode(inputText, addSpecialTokens: false)
+                    let textTokenIds = tokenIds.map { Int32($0) }
+
+                    result = model.generate(
+                        textTokenIds: textTokenIds,
+                        voiceEmbedding: voiceEmb,
+                        temperature: 0.4,
+                        topP: 0.9,
+                        maxAudioFrames: estimatedFrames,
+                        progressCallback: { frame, total in
+                            Task { @MainActor in
+                                self.currentFrame = frame
+                                self.maxFrames = total
+                                self.generationProgress = Double(frame) / Double(total)
+                            }
+                        },
+                        shouldCancel: {
+                            Task.isCancelled
+                        }
+                    )
+                }
 
                 if let result = result {
                     await MainActor.run {

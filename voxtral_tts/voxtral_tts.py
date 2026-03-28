@@ -10,6 +10,7 @@ Three-stage architecture:
 """
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -348,6 +349,151 @@ class Model(nn.Module):
         logits[:, indices] = penalized
         return logits
 
+    @staticmethod
+    def _split_text_into_chunks(text: str, min_words: int = 10) -> list:
+        """Split text at sentence-boundary punctuation into chunks.
+
+        Keeps punctuation attached to the preceding chunk. Merges short
+        chunks (< min_words) with adjacent chunks to avoid choppy audio.
+        """
+        parts = re.split(r'(?<=[.!?;:\n])\s*', text)
+        parts = [p.strip() for p in parts if p.strip()]
+        if not parts:
+            return [text]
+        # Merge short chunks with the next chunk
+        merged = []
+        for part in parts:
+            if merged and len(merged[-1].split()) < min_words:
+                merged[-1] = merged[-1] + " " + part
+            else:
+                merged.append(part)
+        # If last chunk is too short, merge with previous
+        if len(merged) > 1 and len(merged[-1].split()) < min_words:
+            merged[-2] = merged[-2] + " " + merged[-1]
+            merged.pop()
+        return merged if merged else [text]
+
+    def _generate_chunk(
+        self,
+        text: str,
+        tokenizer,
+        voice_emb: Optional[mx.array],
+        temperature: float,
+        top_p: float,
+        max_audio_frames: int,
+        repetition_penalty: float,
+        verbose: bool,
+        chunk_label: str = "",
+    ) -> Optional[Tuple[mx.array, int]]:
+        """Generate audio for a single text chunk.
+
+        Returns:
+            (audio_array, token_count) or None if no audio was generated.
+        """
+        audio_args = self.config.get_audio_model_args()
+        start = time.perf_counter()
+
+        # Build prompt with correct TTS template
+        input_ids = self._build_prompt(text, tokenizer, voice_emb)
+        B = input_ids.shape[0]
+
+        if verbose:
+            print(f"  {chunk_label}Prompt tokens: {input_ids.shape[1]}, "
+                  f"voice positions: {voice_emb.shape[0] if voice_emb is not None else 0}")
+
+        # Build input embeddings: token embeddings with voice embeddings at [AUDIO] positions
+        token_embs = self.language_model.tok_embeddings(input_ids)  # [B, T, dim]
+
+        if voice_emb is not None:
+            if voice_emb.ndim == 2:
+                voice_emb_expanded = voice_emb[None, :, :]
+            else:
+                voice_emb_expanded = voice_emb
+
+            n_voice = voice_emb.shape[0] if voice_emb.ndim == 2 else voice_emb.shape[1]
+            first_audio_pos = 2
+            last_audio_pos = first_audio_pos + n_voice
+
+            before = token_embs[:, :first_audio_pos, :]
+            after = token_embs[:, last_audio_pos:, :]
+            voice_block = mx.broadcast_to(
+                voice_emb_expanded, (B, n_voice, token_embs.shape[-1])
+            )
+            input_embeds = mx.concatenate([before, voice_block, after], axis=1)
+        else:
+            input_embeds = token_embs
+
+        # Stage 1: Forward pass with combined embeddings (single pass)
+        logits, hidden_states, cache = self.language_model(
+            input_embeds=input_embeds, cache=None,
+        )
+
+        # Autoregressive audio frame generation
+        all_semantic_codes = []
+        all_acoustic_codes = []
+        past_semantic_codes = []
+
+        # Precompute semantic logit mask
+        n_valid_semantic = AUDIO_CODE_OFFSET + audio_args.semantic_codebook_size
+        semantic_mask = mx.full((1, self.acoustic_transformer.semantic_codebook_output.weight.shape[0]), -1e9)
+        semantic_mask[:, 1:n_valid_semantic] = 0.0
+
+        for frame_idx in range(max_audio_frames):
+            last_hidden = hidden_states[:, -1, :]
+
+            semantic_logits = self.acoustic_transformer.predict_semantic(last_hidden)
+            semantic_logits = semantic_logits + semantic_mask
+
+            if repetition_penalty != 1.0 and past_semantic_codes:
+                semantic_logits = self._apply_repetition_penalty(
+                    semantic_logits, past_semantic_codes, repetition_penalty,
+                )
+
+            sem_code_raw = mx.argmax(semantic_logits, axis=-1)
+
+            if mx.any(sem_code_raw < AUDIO_CODE_OFFSET).item():
+                if verbose:
+                    print(f"  {chunk_label}End-of-audio at frame {frame_idx}")
+                break
+
+            sem_code = sem_code_raw - AUDIO_CODE_OFFSET
+            past_semantic_codes.append(sem_code_raw.item())
+
+            acou_code = self.acoustic_transformer.decode_one_frame(last_hidden)
+
+            all_semantic_codes.append(sem_code)
+            all_acoustic_codes.append(acou_code)
+
+            audio_emb = self._encode_audio_frame(sem_code_raw, acou_code)
+            audio_emb = audio_emb[:, None, :]
+
+            logits, hidden_states, cache = self.language_model(
+                input_embeds=audio_emb, cache=cache,
+            )
+
+            if verbose and frame_idx % 50 == 0:
+                elapsed = time.perf_counter() - start
+                print(f"  {chunk_label}Frame {frame_idx}/{max_audio_frames}, "
+                      f"elapsed: {elapsed:.1f}s")
+
+            mx.eval(sem_code, acou_code)
+
+        if not all_semantic_codes:
+            return None
+
+        semantic_codes = mx.stack(all_semantic_codes, axis=1)
+        acoustic_codes = mx.stack(all_acoustic_codes, axis=1)
+
+        if verbose:
+            print(f"  {chunk_label}Generated {semantic_codes.shape[1]} audio frames")
+
+        audio = self.audio_tokenizer.decode(semantic_codes, acoustic_codes)
+        audio = audio[0]
+        mx.eval(audio)
+
+        token_count = input_ids.shape[1] + len(all_semantic_codes)
+        return audio, token_count
+
     def generate(
         self,
         text: str,
@@ -360,14 +506,11 @@ class Model(nn.Module):
         verbose: bool = False,
         **kwargs,
     ) -> Generator[GenerationResult, None, None]:
-        """Generate speech from text.
+        """Generate speech from text, splitting long text into chunks.
 
-        The correct generation flow:
-        1. Build prompt: [BOS][BEGIN_AUDIO][AUDIO]*N[TEXT_TO_AUDIO] text [AUDIO_TO_TEXT][BEGIN_AUDIO]
-        2. Replace [AUDIO] positions with voice embeddings, forward through LLM
-        3. Autoregressively generate semantic tokens (masked to audio vocab)
-        4. For each semantic token, flow-matching generates 36 acoustic tokens
-        5. All codes are decoded to waveform by the codec
+        Long text is split at sentence boundaries (. ! ? ; : newline) and
+        each chunk is generated independently. Audio is concatenated with
+        short silence gaps between chunks.
 
         Args:
             text: Input text to synthesize
@@ -386,11 +529,10 @@ class Model(nn.Module):
             raise ValueError("tokenizer is required — use load() to get model and tokenizer")
 
         start_time = time.perf_counter()
-        audio_args = self.config.get_audio_model_args()
 
         # Load voice embedding if specified
         voice_emb = None
-        self._current_voice_name = None  # Reset each call
+        self._current_voice_name = None
         if voice is not None:
             voice_path = Path(voice)
             if voice_path.exists():
@@ -399,136 +541,65 @@ class Model(nn.Module):
             else:
                 self._current_voice_name = voice
 
-        # Build prompt with correct TTS template
-        input_ids = self._build_prompt(text, tokenizer, voice_emb)
-        B = input_ids.shape[0]
+        # Split text into chunks for better quality on long inputs
+        chunks = self._split_text_into_chunks(text)
+        n_chunks = len(chunks)
 
-        if verbose:
-            print(f"  Prompt tokens: {input_ids.shape[1]}, "
-                  f"voice positions: {voice_emb.shape[0] if voice_emb is not None else 0}")
+        if verbose and n_chunks > 1:
+            print(f"  Split into {n_chunks} chunks: {[c[:40] + '...' if len(c) > 40 else c for c in chunks]}")
 
-        # Build input embeddings: token embeddings with voice embeddings at [AUDIO] positions
-        token_embs = self.language_model.tok_embeddings(input_ids)  # [B, T, dim]
+        # Allocate frame budget proportional to word count per chunk
+        total_words = sum(len(c.split()) for c in chunks)
+        chunk_audio_parts = []
+        total_token_count = 0
 
-        if voice_emb is not None:
-            # voice_emb is [N, dim] — expand to [B, N, dim]
-            if voice_emb.ndim == 2:
-                voice_emb_expanded = voice_emb[None, :, :]  # [1, N, dim]
+        for chunk_idx, chunk_text in enumerate(chunks):
+            chunk_words = len(chunk_text.split())
+            if total_words > 0:
+                chunk_frames = max(50, int(max_audio_frames * chunk_words / total_words))
             else:
-                voice_emb_expanded = voice_emb
+                chunk_frames = max_audio_frames
 
-            n_voice = voice_emb.shape[0] if voice_emb.ndim == 2 else voice_emb.shape[1]
+            chunk_label = f"[Chunk {chunk_idx + 1}/{n_chunks}] " if n_chunks > 1 else ""
 
-            # [AUDIO] positions are contiguous starting at index 2
-            # (after BOS=1 and BEGIN_AUDIO=25)
-            first_audio_pos = 2
-            last_audio_pos = first_audio_pos + n_voice
-
-            # Slice: [before_audio | voice_emb | after_audio]
-            before = token_embs[:, :first_audio_pos, :]
-            after = token_embs[:, last_audio_pos:, :]
-            voice_block = mx.broadcast_to(
-                voice_emb_expanded, (B, n_voice, token_embs.shape[-1])
-            )
-            input_embeds = mx.concatenate([before, voice_block, after], axis=1)
-        else:
-            input_embeds = token_embs
-
-        # Stage 1: Forward pass with combined embeddings (single pass)
-        logits, hidden_states, cache = self.language_model(
-            input_embeds=input_embeds, cache=None,
-        )
-
-        # Autoregressive audio frame generation
-        # Semantic tokens are predicted by the acoustic transformer's semantic head,
-        # NOT the LLM's output logits. The LLM only provides hidden states.
-        all_semantic_codes = []
-        all_acoustic_codes = []
-        past_semantic_codes = []
-
-        # Precompute semantic logit mask: mask EMPTY(0) and padding (>= 2 + 8192)
-        n_valid_semantic = AUDIO_CODE_OFFSET + audio_args.semantic_codebook_size  # 2 + 8192 = 8194
-        semantic_mask = mx.full((1, self.acoustic_transformer.semantic_codebook_output.weight.shape[0]), -1e9)
-        # Unmask valid tokens: 1 (END) through n_valid_semantic-1
-        # Token 0 (EMPTY) stays masked to prevent premature termination
-        # Token 1 (END) is unmasked to allow natural termination
-        semantic_mask[:, 1:n_valid_semantic] = 0.0
-
-        for frame_idx in range(max_audio_frames):
-            # Get the last hidden state (post-norm) for the acoustic transformer
-            last_hidden = hidden_states[:, -1, :]  # [B, dim]
-
-            # Predict semantic token using acoustic transformer's semantic head
-            semantic_logits = self.acoustic_transformer.predict_semantic(last_hidden)  # [B, 8320]
-
-            # Mask invalid tokens: EMPTY(0) and padding (>= 8194)
-            semantic_logits = semantic_logits + semantic_mask
-
-            # Apply repetition penalty to semantic logits
-            if repetition_penalty != 1.0 and past_semantic_codes:
-                semantic_logits = self._apply_repetition_penalty(
-                    semantic_logits, past_semantic_codes, repetition_penalty,
-                )
-
-            # Reference uses argmax for semantic codes
-            sem_code_raw = mx.argmax(semantic_logits, axis=-1)  # [B]
-
-            # Check for end-of-audio: code 1 (END) = stop
-            if mx.any(sem_code_raw < AUDIO_CODE_OFFSET).item():
-                if verbose:
-                    print(f"  End-of-audio at frame {frame_idx}")
-                break
-
-            # Map from raw semantic output to codebook index (0-8191)
-            sem_code = sem_code_raw - AUDIO_CODE_OFFSET
-
-            # Track for repetition penalty
-            past_semantic_codes.append(sem_code_raw.item())
-
-            # Stage 2: Flow matching to get acoustic codes
-            acou_code = self.acoustic_transformer.decode_one_frame(last_hidden)  # [B, 36]
-
-            all_semantic_codes.append(sem_code)
-            all_acoustic_codes.append(acou_code)
-
-            # Encode audio codes back into embedding for next LLM step
-            audio_emb = self._encode_audio_frame(sem_code_raw, acou_code)  # [B, dim]
-            audio_emb = audio_emb[:, None, :]  # [B, 1, dim]
-
-            # Feed audio embedding directly into LLM (bypass token lookup)
-            logits, hidden_states, cache = self.language_model(
-                input_embeds=audio_emb, cache=cache,
+            result = self._generate_chunk(
+                text=chunk_text,
+                tokenizer=tokenizer,
+                voice_emb=voice_emb,
+                temperature=temperature,
+                top_p=top_p,
+                max_audio_frames=chunk_frames,
+                repetition_penalty=repetition_penalty,
+                verbose=verbose,
+                chunk_label=chunk_label,
             )
 
-            if verbose and frame_idx % 50 == 0:
-                elapsed = time.perf_counter() - start_time
-                print(f"  Frame {frame_idx}/{max_audio_frames}, "
-                      f"elapsed: {elapsed:.1f}s")
+            if result is not None:
+                audio, token_count = result
+                chunk_audio_parts.append(audio)
+                total_token_count += token_count
 
-            mx.eval(sem_code, acou_code)
-
-        if not all_semantic_codes:
+        if not chunk_audio_parts:
             return
 
-        # Stack all codes
-        semantic_codes = mx.stack(all_semantic_codes, axis=1)  # [B, T]
-        acoustic_codes = mx.stack(all_acoustic_codes, axis=1)  # [B, T, 36]
+        # Concatenate chunk audio with 10ms silence gaps (240 samples at 24kHz)
+        if len(chunk_audio_parts) == 1:
+            final_audio = chunk_audio_parts[0]
+        else:
+            silence = mx.zeros((240,))
+            parts = []
+            for i, audio in enumerate(chunk_audio_parts):
+                parts.append(audio)
+                if i < len(chunk_audio_parts) - 1:
+                    parts.append(silence)
+            final_audio = mx.concatenate(parts)
 
-        if verbose:
-            print(f"  Generated {semantic_codes.shape[1]} audio frames")
-
-        # Stage 3: Decode audio codes to waveform
-        audio = self.audio_tokenizer.decode(semantic_codes, acoustic_codes)  # [B, samples]
-        audio = audio[0]  # Take first batch item
-
-        mx.eval(audio)
-
-        token_count = input_ids.shape[1] + len(all_semantic_codes)
+        mx.eval(final_audio)
 
         yield self._make_generation_result(
-            audio=audio,
+            audio=final_audio,
             start_time=start_time,
-            token_count=token_count,
+            token_count=total_token_count,
             segment_idx=0,
         )
 

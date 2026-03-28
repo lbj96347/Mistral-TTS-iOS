@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -65,7 +65,7 @@
 		4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralTokenizer.swift; sourceTree = "<group>"; };
 		5A2DB179F3581788C00E152C /* ModelConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfig.swift; sourceTree = "<group>"; };
 		7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
-		7E8E3F5F5F4D8330514AF4A9 /* VoxtralTTS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E8E3F5F5F4D8330514AF4A9 /* VoxtralTTS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8EE003B0E5FFD3F5A9B903E3 /* AudioPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerTests.swift; sourceTree = "<group>"; };
 		8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcousticTransformer.swift; sourceTree = "<group>"; };
 		AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralModel.swift; sourceTree = "<group>"; };
@@ -311,7 +311,6 @@
 				C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				58D7FF7F631D3070C93DE297 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -529,6 +528,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5G88BPG37C;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VoxtralTTS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -554,6 +554,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5G88BPG37C;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VoxtralTTS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

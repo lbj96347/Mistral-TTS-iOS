@@ -153,7 +153,9 @@ struct ContentView: View {
                 VStack(spacing: 4) {
                     ProgressView(value: viewModel.generationProgress)
                     HStack {
-                        Text("Frame \(viewModel.currentFrame) / \(viewModel.maxFrames)")
+                        Text(viewModel.totalChunks > 1
+                            ? "Chunk \(viewModel.currentChunk + 1)/\(viewModel.totalChunks) — Frame \(viewModel.currentFrame)/\(viewModel.maxFrames)"
+                            : "Frame \(viewModel.currentFrame) / \(viewModel.maxFrames)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()

@@ -67,6 +67,60 @@ func sampleToken(_ logits: MLXArray, temperature: Float = 0.0, topP: Float = 1.0
     return MLXRandom.categorical(scaled)
 }
 
+// MARK: - Text Chunking
+
+/// Split text at sentence-boundary punctuation into chunks for better TTS quality.
+/// Keeps punctuation attached to the preceding chunk. Merges short chunks
+/// (< minWords) with adjacent chunks to avoid choppy audio.
+func splitTextIntoChunks(_ text: String, minWords: Int = 10) -> [String] {
+    // Split after sentence-ending punctuation
+    let pattern = try! NSRegularExpression(pattern: #"(?<=[.!?;:\n])\s*"#)
+    let nsText = text as NSString
+    var parts: [String] = []
+    var lastEnd = 0
+
+    let matches = pattern.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+    for match in matches {
+        let partRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
+        let part = nsText.substring(with: partRange).trimmingCharacters(in: .whitespaces)
+        if !part.isEmpty {
+            parts.append(part)
+        }
+        lastEnd = match.range.location + match.range.length
+    }
+    // Remaining text after last match
+    if lastEnd < nsText.length {
+        let remaining = nsText.substring(from: lastEnd).trimmingCharacters(in: .whitespaces)
+        if !remaining.isEmpty {
+            parts.append(remaining)
+        }
+    }
+
+    if parts.isEmpty {
+        return [text]
+    }
+
+    // Merge short chunks with the next chunk
+    var merged: [String] = []
+    for part in parts {
+        if let last = merged.last,
+           last.split(whereSeparator: { $0.isWhitespace }).count < minWords {
+            merged[merged.count - 1] = last + " " + part
+        } else {
+            merged.append(part)
+        }
+    }
+
+    // If last chunk is too short, merge with previous
+    if merged.count > 1,
+       merged.last!.split(whereSeparator: { $0.isWhitespace }).count < minWords {
+        let last = merged.removeLast()
+        merged[merged.count - 1] = merged[merged.count - 1] + " " + last
+    }
+
+    return merged.isEmpty ? [text] : merged
+}
+
 // MARK: - Main Model
 
 class VoxtralTTSModel: Module {
@@ -290,6 +344,103 @@ class VoxtralTTSModel: Module {
             samples: samples,
             sampleRate: sampleRate,
             tokenCount: tokenIds.dim(1) + allSemanticCodes.count,
+            audioDuration: String(format: "%02d:%02d:%02d.%03d", hours, mins, secs, ms),
+            realTimeFactor: rtf,
+            processingTimeSeconds: elapsed
+        )
+    }
+    // MARK: - Chunked Generation
+
+    /// Generate audio for a long text by splitting it into chunks at punctuation boundaries.
+    /// Each chunk is generated independently and the audio is concatenated with silence gaps.
+    func generateChunked(
+        text: String,
+        tokenizer: VoxtralTokenizer,
+        voiceEmbedding: MLXArray? = nil,
+        temperature: Float = 0.4,
+        topP: Float = 0.9,
+        maxAudioFrames: Int = 2048,
+        repetitionPenalty: Float = 1.1,
+        progressCallback: ((Int, Int, Int, Int) -> Void)? = nil,
+        shouldCancel: (() -> Bool)? = nil
+    ) -> GenerationResult? {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let chunks = splitTextIntoChunks(text)
+        let nChunks = chunks.count
+
+        // Allocate frame budget proportional to word count per chunk
+        let totalWords = chunks.reduce(0) { $0 + $1.split(whereSeparator: { $0.isWhitespace }).count }
+
+        var chunkAudioParts: [MLXArray] = []
+        var totalTokenCount = 0
+
+        for (chunkIdx, chunkText) in chunks.enumerated() {
+            if shouldCancel?() == true { break }
+
+            let chunkWords = chunkText.split(whereSeparator: { $0.isWhitespace }).count
+            let chunkFrames: Int
+            if totalWords > 0 {
+                chunkFrames = max(50, Int(Double(maxAudioFrames) * Double(chunkWords) / Double(totalWords)))
+            } else {
+                chunkFrames = maxAudioFrames
+            }
+
+            let textTokenIds = tokenizer.encode(chunkText, addSpecialTokens: false).map { Int32($0) }
+
+            let result = generate(
+                textTokenIds: textTokenIds,
+                voiceEmbedding: voiceEmbedding,
+                temperature: temperature,
+                topP: topP,
+                maxAudioFrames: chunkFrames,
+                repetitionPenalty: repetitionPenalty,
+                progressCallback: { frame, total in
+                    progressCallback?(chunkIdx, nChunks, frame, total)
+                },
+                shouldCancel: shouldCancel
+            )
+
+            if let result = result {
+                chunkAudioParts.append(result.audio)
+                totalTokenCount += result.tokenCount
+            }
+        }
+
+        guard !chunkAudioParts.isEmpty else { return nil }
+
+        // Concatenate chunk audio with 10ms silence gaps (240 samples at 24kHz)
+        let finalAudio: MLXArray
+        if chunkAudioParts.count == 1 {
+            finalAudio = chunkAudioParts[0]
+        } else {
+            let silence = MLXArray.zeros([240])
+            var parts: [MLXArray] = []
+            for (i, audio) in chunkAudioParts.enumerated() {
+                parts.append(audio)
+                if i < chunkAudioParts.count - 1 {
+                    parts.append(silence)
+                }
+            }
+            finalAudio = MLX.concatenated(parts, axis: 0)
+        }
+
+        eval(finalAudio)
+
+        let elapsed = Float(CFAbsoluteTimeGetCurrent() - startTime)
+        let samples = finalAudio.dim(0)
+        let audioDurationSec = Float(samples) / Float(sampleRate)
+        let rtf = audioDurationSec / elapsed
+
+        let hours = Int(audioDurationSec / 3600)
+        let mins = Int((audioDurationSec.truncatingRemainder(dividingBy: 3600)) / 60)
+        let secs = Int(audioDurationSec.truncatingRemainder(dividingBy: 60))
+        let ms = Int((audioDurationSec.truncatingRemainder(dividingBy: 1)) * 1000)
+
+        return GenerationResult(
+            audio: finalAudio,
+            samples: samples,
+            sampleRate: sampleRate,
+            tokenCount: totalTokenCount,
             audioDuration: String(format: "%02d:%02d:%02d.%03d", hours, mins, secs, ms),
             realTimeFactor: rtf,
             processingTimeSeconds: elapsed
