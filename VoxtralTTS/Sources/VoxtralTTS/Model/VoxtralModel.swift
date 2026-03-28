@@ -261,6 +261,12 @@ class VoxtralTTSModel: Module {
             cache = result.newCache
 
             eval(semCode, acouCode)
+
+            // Periodically clear MLX buffer cache to reduce peak memory on iOS
+            if frameIdx % 50 == 0 {
+                Memory.clearCache()
+            }
+
             progressCallback?(frameIdx, maxAudioFrames)
         }
 
@@ -318,19 +324,65 @@ func loadVoxtralModel(from modelPath: URL) throws -> (VoxtralTTSModel, ModelConf
     // Instantiate model
     let model = VoxtralTTSModel(config: config)
 
-    // Handle quantization - replace compatible Linear layers with QuantizedLinear
+    // Handle quantization - replace compatible Linear and Embedding layers
+    // Supports mixed per-component quantization (e.g. q2 LLM + q4 acoustic)
     if let quantConfig = config.quantization {
-        QuantizedLinear.quantize(
-            model: model,
-            groupSize: quantConfig.groupSize,
-            bits: quantConfig.bits,
-            predicate: { linear in
+        let cb = quantConfig.componentBits
+        let llmBits = cb?["language_model"] ?? quantConfig.bits
+        let acousticBits = cb?["acoustic_transformer"] ?? quantConfig.bits
+        let codecBits = cb?["audio_tokenizer"] ?? quantConfig.bits
+        let embBits = cb?["audio_token_embedding"] ?? llmBits
+
+        let sizeFilter: (Module, Int) -> Bool = { module, gs in
+            if let linear = module as? Linear {
                 let shape = linear.weight.shape
                 let lastDim = shape[shape.count - 1]
                 let minDim = shape.min() ?? 0
-                return lastDim % quantConfig.groupSize == 0 && minDim > quantConfig.groupSize
+                return lastDim % gs == 0 && minDim > gs
+            }
+            if let embedding = module as? Embedding {
+                let (count, dims) = embedding.shape
+                return dims % gs == 0 && min(count, dims) > gs
+            }
+            return false
+        }
+
+        quantize(
+            model: model.languageModel,
+            groupSize: quantConfig.groupSize,
+            bits: llmBits,
+            filter: { _, module in sizeFilter(module, quantConfig.groupSize) }
+        )
+        quantize(
+            model: model.acousticTransformer,
+            groupSize: quantConfig.groupSize,
+            bits: acousticBits,
+            filter: { _, module in
+                if module is Embedding { return false }
+                return sizeFilter(module, quantConfig.groupSize)
             }
         )
+        quantize(
+            model: model.audioTokenEmbedding,
+            groupSize: quantConfig.groupSize,
+            bits: embBits,
+            filter: { _, module in sizeFilter(module, quantConfig.groupSize) }
+        )
+        // Quantize codec transformer blocks individually (heterogeneous decoder_blocks
+        // array is incompatible with quantize's update on the whole codec)
+        for block in model.audioTokenizer.decoderBlocks {
+            if let tfBlock = block as? DecoderTransformerBlock {
+                quantize(
+                    model: tfBlock,
+                    groupSize: quantConfig.groupSize,
+                    bits: codecBits,
+                    filter: { _, module in
+                        if module is Embedding { return false }
+                        return sizeFilter(module, quantConfig.groupSize)
+                    }
+                )
+            }
+        }
     }
 
     // Load weights from safetensors

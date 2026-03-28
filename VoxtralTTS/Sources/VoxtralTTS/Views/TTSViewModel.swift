@@ -1,5 +1,6 @@
 import SwiftUI
 import MLX
+import MLXNN
 import Foundation
 
 @MainActor
@@ -73,6 +74,11 @@ class TTSViewModel: ObservableObject {
 
                 loadingStatus = "Loading tokenizer..."
                 let loadedTokenizer = try await VoxtralTokenizer(modelPath: url)
+
+                // Set memory limits for iOS to prevent jetsam kills
+                #if os(iOS)
+                Memory.cacheLimit = 20 * 1024 * 1024  // 20MB buffer cache
+                #endif
 
                 await MainActor.run {
                     self.model = loadedModel

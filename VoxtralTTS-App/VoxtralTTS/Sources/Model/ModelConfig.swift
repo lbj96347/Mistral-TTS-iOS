@@ -48,9 +48,9 @@ struct AcousticTransformerConfig: Codable {
     }
 
     init() {
-        inputDim = 3072; dim = 3072; nLayers = 3; headDim = 128; hiddenDim = 9216
-        nHeads = 32; nKvHeads = 8; useBiases = false; normEps = 1e-5
-        ropeTheta = 10000.0; sigma = 1e-5; sigmaMax = 1.0
+        self.inputDim = 3072; self.dim = 3072; self.nLayers = 3; self.headDim = 128
+        self.hiddenDim = 9216; self.nHeads = 32; self.nKvHeads = 8; self.useBiases = false
+        self.normEps = 1e-5; self.ropeTheta = 10000.0; self.sigma = 1e-5; self.sigmaMax = 1.0
     }
 }
 
@@ -145,12 +145,14 @@ struct AudioTokenizerConfig: Codable {
     }
 
     init() {
-        channels = 1; samplingRate = 24000; pretransformPatchSize = 240; patchProjectionKernelSize = 7
-        semanticCodebookSize = 8192; semanticDim = 256; acousticCodebookSize = 21; acousticDim = 36
-        dim = 1024; hiddenDim = 4096; headDim = 128; nHeads = 8; nKvHeads = 8; normEps = 0.01
-        qkNorm = true; qkNormEps = 1e-6; causal = true; attnSlidingWindowSize = 16
-        halfAttnWindowUponDownsampling = true; layerScale = true; layerScaleInit = 0.01; convWeightNorm = true
-        decoderTransformerLengths = [2, 2, 2, 2]; decoderConvKernels = [3, 4, 4, 4]; decoderConvStrides = [1, 2, 2, 2]
+        self.channels = 1; self.samplingRate = 24000; self.pretransformPatchSize = 240
+        self.patchProjectionKernelSize = 7; self.semanticCodebookSize = 8192; self.semanticDim = 256
+        self.acousticCodebookSize = 21; self.acousticDim = 36; self.dim = 1024; self.hiddenDim = 4096
+        self.headDim = 128; self.nHeads = 8; self.nKvHeads = 8; self.normEps = 0.01
+        self.qkNorm = true; self.qkNormEps = 1e-6; self.causal = true; self.attnSlidingWindowSize = 16
+        self.halfAttnWindowUponDownsampling = true; self.layerScale = true; self.layerScaleInit = 0.01
+        self.convWeightNorm = true; self.decoderTransformerLengths = [2, 2, 2, 2]
+        self.decoderConvKernels = [3, 4, 4, 4]; self.decoderConvStrides = [1, 2, 2, 2]
     }
 }
 
@@ -199,10 +201,10 @@ struct MultimodalAudioModelConfig: Codable {
     }
 
     init() {
-        semanticCodebookSize = 8192; acousticCodebookSize = 21; nAcousticCodebook = 36
-        audioTokenId = 24; beginAudioTokenId = 25; bosTokenId = 1; samplingRate = 24000
-        frameRate = 12.5; nCodebook = 37; inputEmbeddingConcatType = "sum"
-        acousticTransformerArgs = nil
+        self.semanticCodebookSize = 8192; self.acousticCodebookSize = 21; self.nAcousticCodebook = 36
+        self.audioTokenId = 24; self.beginAudioTokenId = 25; self.bosTokenId = 1
+        self.samplingRate = 24000; self.frameRate = 12.5; self.nCodebook = 37
+        self.inputEmbeddingConcatType = "sum"; self.acousticTransformerArgs = nil
     }
 
     var codebookSizes: [Int] {
@@ -285,15 +287,19 @@ struct ModelConfig: Codable {
 struct QuantizationConfig: Codable {
     var groupSize: Int
     var bits: Int
+    var componentBits: [String: Int]?
 
     enum CodingKeys: String, CodingKey {
         case groupSize = "group_size"
         case bits
+        case componentBits = "component_bits"
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         groupSize = try c.decodeIfPresent(Int.self, forKey: .groupSize) ?? 64
         bits = try c.decodeIfPresent(Int.self, forKey: .bits) ?? 4
+        componentBits = try c.decodeIfPresent([String: Int].self, forKey: .componentBits)
     }
 }
+

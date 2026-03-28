@@ -298,10 +298,78 @@ def inspect(hf_repo: str, revision: Optional[str] = None):
                 break
 
 
+def _load_mlx_weights(model_path: Path) -> dict:
+    """Load weights from an already-converted MLX model directory."""
+    weights = {}
+    for sf_file in sorted(model_path.glob("*.safetensors")):
+        print(f"  Loading {sf_file.name}...")
+        w = mx.load(str(sf_file))
+        weights.update(w)
+    return weights
+
+
+def _dequantize_weights(weights: dict, config: dict) -> dict:
+    """Dequantize weights back to full precision for re-quantization."""
+    quant_config = config.get("quantization", {})
+    if not quant_config:
+        return weights
+
+    group_size = quant_config.get("group_size", 64)
+    bits = quant_config.get("bits", 4)
+    component_bits = quant_config.get("component_bits", {})
+
+    dequantized = {}
+    skip_keys = set()
+
+    for key in sorted(weights.keys()):
+        if key in skip_keys:
+            continue
+
+        # Check if this key has quantized companions (.scales, .biases)
+        base = key
+        if key.endswith(".weight"):
+            scales_key = key.replace(".weight", ".scales")
+            biases_key = key.replace(".weight", ".biases")
+            if scales_key in weights and biases_key in weights:
+                # Determine bits for this component
+                component = _get_component(key)
+                q_bits = component_bits.get(component, bits)
+
+                # Dequantize
+                value = mx.dequantize(
+                    weights[key], weights[scales_key], weights[biases_key],
+                    group_size=group_size, bits=q_bits
+                )
+                dequantized[key] = value
+                skip_keys.add(scales_key)
+                skip_keys.add(biases_key)
+                continue
+
+        dequantized[key] = weights[key]
+
+    return dequantized
+
+
+def _get_component(key: str) -> str:
+    """Determine which model component a weight key belongs to."""
+    if key.startswith("language_model."):
+        return "language_model"
+    elif key.startswith("acoustic_transformer."):
+        return "acoustic_transformer"
+    elif key.startswith("audio_tokenizer."):
+        return "audio_tokenizer"
+    elif key.startswith("audio_token_embedding."):
+        return "audio_token_embedding"
+    return "unknown"
+
+
 def convert(
     hf_repo: str,
     output_dir: str = "mlx_model",
     quantize: Optional[str] = None,
+    quantize_llm: Optional[str] = None,
+    quantize_acoustic: Optional[str] = None,
+    quantize_codec: Optional[str] = None,
     revision: Optional[str] = None,
     local_dir: Optional[str] = None,
 ):
@@ -310,7 +378,10 @@ def convert(
     Args:
         hf_repo: HuggingFace repository ID
         output_dir: Output directory for MLX model
-        quantize: Quantization level (q4, q8, None)
+        quantize: Uniform quantization level (q2, q4, q6, q8)
+        quantize_llm: LLM-specific quantization (overrides --quantize for LLM)
+        quantize_acoustic: Acoustic transformer quantization (overrides --quantize)
+        quantize_codec: Codec quantization (overrides --quantize)
         revision: HuggingFace revision
     """
     output_path = Path(output_dir)
@@ -324,41 +395,78 @@ def convert(
         print(f"[1/5] Downloading model from {hf_repo}...")
         model_path = get_model_path(hf_repo, revision)
 
-    # Step 2: Load and parse config
-    print("[2/5] Loading configuration...")
-    config = load_params(model_path)
+    # Detect if this is an already-converted MLX model or raw HF model
+    is_mlx_model = (model_path / "config.json").exists() and not (model_path / "params.json").exists()
 
-    # Step 3: Load weights
-    print("[3/5] Loading weights...")
-    weights = load_safetensors(model_path)
+    if is_mlx_model:
+        # Re-quantize from existing MLX model
+        print("[2/5] Loading MLX config...")
+        with open(model_path / "config.json") as f:
+            config = json.load(f)
 
-    # Analyze weight structure
-    components = analyze_weights(weights)
-    print(f"  Language model: {len(components['language_model'])} tensors")
-    print(f"  Acoustic transformer: {len(components['acoustic_transformer'])} tensors")
-    print(f"  Audio tokenizer: {len(components['audio_tokenizer'])} tensors")
-    print(f"  Audio embeddings: {len(components['audio_embeddings'])} tensors")
-    if components["unknown"]:
-        print(f"  Unknown: {len(components['unknown'])} tensors")
-        for k in components["unknown"]:
-            print(f"    - {k}")
+        print("[3/5] Loading MLX weights...")
+        weights = _load_mlx_weights(model_path)
 
-    # Step 4: Remap weights
-    print("[4/5] Remapping weights...")
-    weights = remap_weights(weights)
+        # Dequantize if the source model was quantized
+        if config.get("quantization"):
+            print("[4/5] Dequantizing weights for re-quantization...")
+            weights = _dequantize_weights(weights, config)
+            # Remove old quantization config
+            del config["quantization"]
+        else:
+            print("[4/5] Weights already in full precision, skipping remap...")
+    else:
+        # Convert from HF format
+        print("[2/5] Loading configuration...")
+        config = load_params(model_path)
 
-    # Apply quantization if requested
-    if quantize:
-        print(f"  Quantizing to {quantize}...")
-        q_bits = {"q2": 2, "q4": 4, "q6": 6, "q8": 8}.get(quantize, 4)
+        print("[3/5] Loading weights...")
+        weights = load_safetensors(model_path)
+
+        # Analyze weight structure
+        components = analyze_weights(weights)
+        print(f"  Language model: {len(components['language_model'])} tensors")
+        print(f"  Acoustic transformer: {len(components['acoustic_transformer'])} tensors")
+        print(f"  Audio tokenizer: {len(components['audio_tokenizer'])} tensors")
+        print(f"  Audio embeddings: {len(components['audio_embeddings'])} tensors")
+        if components["unknown"]:
+            print(f"  Unknown: {len(components['unknown'])} tensors")
+            for k in components["unknown"]:
+                print(f"    - {k}")
+
+        print("[4/5] Remapping weights...")
+        weights = remap_weights(weights)
+
+    # Determine per-component quantization bits
+    bits_map = {"q2": 2, "q4": 4, "q6": 6, "q8": 8}
+    use_mixed = quantize_llm or quantize_acoustic or quantize_codec
+    any_quantize = quantize or use_mixed
+
+    if any_quantize:
         group_size = 64
+        # Default bits from --quantize flag (or 4 if only per-component flags used)
+        default_bits = bits_map.get(quantize, 4) if quantize else 4
+
+        # Per-component bits (fall back to default)
+        component_bits = {
+            "language_model": bits_map.get(quantize_llm, default_bits),
+            "acoustic_transformer": bits_map.get(quantize_acoustic, default_bits),
+            "audio_tokenizer": bits_map.get(quantize_codec, default_bits),
+            "audio_token_embedding": bits_map.get(quantize_llm, default_bits),  # follows LLM
+        }
+
+        print(f"  Quantizing: LLM=q{component_bits['language_model']}, "
+              f"acoustic=q{component_bits['acoustic_transformer']}, "
+              f"codec=q{component_bits['audio_tokenizer']}")
+
         quantized = {}
         for key, value in weights.items():
             if (key.endswith(".weight") and
                     value.ndim == 2 and
                     value.shape[-1] % group_size == 0 and
                     min(value.shape) > group_size):
-                # mx.quantize returns (quantized_weight, scales, biases)
+                component = _get_component(key)
+                q_bits = component_bits.get(component, default_bits)
                 q_weight, scales, biases = mx.quantize(value, bits=q_bits, group_size=group_size)
                 quantized[key] = q_weight
                 quantized[key.replace(".weight", ".scales")] = scales
@@ -366,7 +474,11 @@ def convert(
             else:
                 quantized[key] = value
         weights = quantized
-        config["quantization"] = {"group_size": group_size, "bits": q_bits}
+
+        # Store quantization config
+        config["quantization"] = {"group_size": group_size, "bits": default_bits}
+        if use_mixed:
+            config["quantization"]["component_bits"] = component_bits
 
     # Step 5: Save
     print("[5/5] Saving MLX model...")
@@ -409,13 +521,38 @@ def convert(
             )
 
     # Copy tokenizer and voice embeddings
-    tekken_path = model_path / "tekken.json"
-    if tekken_path.exists():
-        shutil.copy(tekken_path, output_path / "tekken.json")
+    for tokenizer_file in ["tekken.json", "tokenizer.json", "tokenizer_config.json"]:
+        src = model_path / tokenizer_file
+        if src.exists():
+            shutil.copy(src, output_path / tokenizer_file)
 
     voice_dir = model_path / "voice_embedding"
     if voice_dir.exists():
-        shutil.copytree(voice_dir, output_path / "voice_embedding", dirs_exist_ok=True)
+        out_voice_dir = output_path / "voice_embedding"
+        out_voice_dir.mkdir(parents=True, exist_ok=True)
+        for vf in voice_dir.iterdir():
+            if vf.suffix == ".safetensors":
+                # Already in safetensors format — copy directly
+                shutil.copy(vf, out_voice_dir / vf.name)
+            elif vf.suffix == ".pt":
+                # Convert .pt voice embedding to .safetensors for iOS compatibility
+                sf_name = vf.stem + ".safetensors"
+                sf_dest = out_voice_dir / sf_name
+                if not sf_dest.exists():
+                    try:
+                        import torch
+                        pt_data = torch.load(str(vf), map_location="cpu", weights_only=True)
+                        if isinstance(pt_data, torch.Tensor):
+                            emb = mx.array(pt_data.float().numpy())
+                        elif isinstance(pt_data, dict) and "embedding" in pt_data:
+                            emb = mx.array(pt_data["embedding"].float().numpy())
+                        else:
+                            shutil.copy(vf, out_voice_dir / vf.name)
+                            continue
+                        mx.save_safetensors(str(sf_dest), {"embedding": emb})
+                    except Exception:
+                        # Fallback: copy .pt as-is
+                        shutil.copy(vf, out_voice_dir / vf.name)
 
     total_mb = total_size / (1024 * 1024)
     print(f"\nDone! Model saved to {output_path}")
@@ -442,7 +579,28 @@ def main():
         type=str,
         choices=["q2", "q4", "q6", "q8"],
         default=None,
-        help="Quantization level",
+        help="Uniform quantization level (applies to all components)",
+    )
+    parser.add_argument(
+        "--quantize-llm",
+        type=str,
+        choices=["q2", "q4", "q6", "q8"],
+        default=None,
+        help="LLM-specific quantization (overrides --quantize for language model + audio embeddings)",
+    )
+    parser.add_argument(
+        "--quantize-acoustic",
+        type=str,
+        choices=["q2", "q4", "q6", "q8"],
+        default=None,
+        help="Acoustic transformer quantization (overrides --quantize)",
+    )
+    parser.add_argument(
+        "--quantize-codec",
+        type=str,
+        choices=["q2", "q4", "q6", "q8"],
+        default=None,
+        help="Codec quantization (overrides --quantize)",
     )
     parser.add_argument(
         "--revision",
@@ -470,6 +628,9 @@ def main():
             hf_repo=args.hf_repo,
             output_dir=args.output_dir,
             quantize=args.quantize,
+            quantize_llm=args.quantize_llm,
+            quantize_acoustic=args.quantize_acoustic,
+            quantize_codec=args.quantize_codec,
             revision=args.revision,
             local_dir=args.local_dir,
         )

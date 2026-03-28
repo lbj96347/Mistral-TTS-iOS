@@ -43,9 +43,29 @@ python3 -m voxtral_tts.convert --inspect
 # Full precision
 python3 -m voxtral_tts.convert --output-dir mlx_model
 
-# With quantization (q2, q4, q8)
+# With uniform quantization (q2, q4, q6, q8)
 python3 -m voxtral_tts.convert --output-dir mlx_model --quantize q4
+
+# Mixed quantization for iOS (recommended for iPhone 15 Pro / 8GB devices)
+python3 -m voxtral_tts.convert --output-dir mlx_model_ios \
+    --quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4
 ```
+
+#### Quantization Guide
+
+| Target Device | RAM | Recommended Command | Estimated Size |
+|---|---|---|---|
+| Mac (M1/M2/M3/M4) | 16GB+ | `--quantize q4` | ~2.1 GB |
+| Mac (8GB) | 8GB | `--quantize q4` | ~2.1 GB |
+| iPhone 15 Pro / iPad Pro | 8GB | `--quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4` | ~1.3 GB |
+| iPhone 16 Pro | 8GB | `--quantize-llm q2 --quantize-acoustic q4 --quantize-codec q4` | ~1.3 GB |
+
+Mixed quantization applies different bit widths per component:
+- `--quantize-llm` — Language model (3.4B params, most quantization-tolerant)
+- `--quantize-acoustic` — Acoustic transformer (390M params, audio-quality-sensitive)
+- `--quantize-codec` — Codec (300M params, audio-quality-sensitive)
+
+Per-component flags override `--quantize` when both are specified.
 
 ### 3. Test the model
 
@@ -59,6 +79,27 @@ python3 -m voxtral_tts.test_model --model-path mlx_model --test loading
 # Weight analysis
 python3 -m voxtral_tts.test_model --model-path mlx_model --test weights
 ```
+
+## iOS App
+
+The `VoxtralTTS/` directory contains a SwiftUI iOS app that runs the model on-device using MLX-Swift.
+
+### iOS Memory Optimizations
+
+The iOS app includes several optimizations to fit within iOS jetsam memory limits:
+
+- **Quantized embeddings** — Both `Linear` and `Embedding` layers (including the 131K-vocab token embedding table) are properly loaded as quantized modules, saving ~800MB compared to unquantized embedding loading.
+- **Quantized output projection** — Tied embedding output uses `quantizedMM` instead of dequantizing the full weight matrix.
+- **GPU cache limit** — MLX buffer cache is capped at 20MB on iOS (per MLX recommendations) to prevent unbounded memory growth during autoregressive generation.
+- **Periodic cache clearing** — `Memory.clearCache()` is called every 50 frames during generation.
+- **Mixed quantization** — The LLM (largest component) can use aggressive q2 while keeping audio-sensitive components at q4.
+
+### Running on iOS
+
+1. Convert the model with iOS-optimized quantization (see Quantization Guide above)
+2. Copy the output directory (e.g., `mlx_model_ios/`) to your device
+3. Open the Xcode project and build for your device (simulator is not supported — MLX requires Metal GPU)
+4. Select the model directory in the app and generate
 
 ## Project Structure
 

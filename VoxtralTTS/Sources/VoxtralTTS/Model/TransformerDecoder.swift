@@ -246,7 +246,7 @@ class MistralTransformerDecoder: Module {
 
         let logits: MLXArray
         if tieWordEmbeddings {
-            logits = h.matmul(tokEmbeddings.weight.T)
+            logits = tokEmbeddings.asLinear(h)
         } else {
             logits = output!(h)
         }

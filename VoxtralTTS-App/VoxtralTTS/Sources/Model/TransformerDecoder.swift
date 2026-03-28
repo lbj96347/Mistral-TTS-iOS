@@ -227,16 +227,10 @@ class MistralTransformerDecoder: Module {
         let allFreqs = precomputeFreqsCis(dim: headDim, end: offset + T, theta: ropeTheta)
         let freqsCis = allFreqs[offset ..< (offset + T)]
 
-        // Causal mask — must cover full key length (T + cache)
+        // Causal mask
         var mask: MLXArray? = nil
         if T > 1 {
-            let totalLen = T + offset
-            // Build (T, totalLen) causal mask: each query position i can attend
-            // to key positions 0..offset+i (all cached positions + up to itself)
-            let queryPositions = MLXArray(Int32(offset) ..< Int32(offset + T)).reshaped(T, 1)
-            let keyPositions = MLXArray(Int32(0) ..< Int32(totalLen)).reshaped(1, totalLen)
-            // Where key > query, mask out with -inf
-            mask = MLX.where(keyPositions .> queryPositions, MLXArray(Float(-1e9)), MLXArray(Float(0.0))).asType(h.dtype)
+            mask = MultiHeadAttention.createAdditiveCausalMask(T).asType(h.dtype)
         }
 
         var newCache: [(MLXArray, MLXArray)] = []

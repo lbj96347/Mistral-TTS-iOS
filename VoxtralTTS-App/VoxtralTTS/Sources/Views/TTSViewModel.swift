@@ -141,6 +141,11 @@ class TTSViewModel: ObservableObject {
                 let modelElapsed = CFAbsoluteTimeGetCurrent() - startTime
                 print("[TTS] Model loaded in \(String(format: "%.2f", modelElapsed))s — dim=\(config.dim), layers=\(config.nLayers)")
 
+                // Set memory limits for iOS to prevent jetsam kills
+                #if os(iOS)
+                Memory.cacheLimit = 20 * 1024 * 1024  // 20MB buffer cache
+                #endif
+
                 loadingStatus = "Loading tokenizer..."
                 print("[TTS] Loading tokenizer...")
                 let tokenizerStart = CFAbsoluteTimeGetCurrent()

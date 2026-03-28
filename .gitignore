@@ -15,6 +15,7 @@ build/
 hf_model/
 mlx_model/
 mlx_model_q4/
+mlx_model_q2/
 
 # Swift / Xcode
 VoxtralTTS/.build/
