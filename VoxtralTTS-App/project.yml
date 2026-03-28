@@ -25,6 +25,8 @@ targets:
       - path: VoxtralTTS/Resources
     info:
       path: VoxtralTTS/Info.plist
+      properties:
+        NSMicrophoneUsageDescription: "Record your voice to create a custom voice clone for text-to-speech."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.voxtral.tts

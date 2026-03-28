@@ -3,23 +3,86 @@ import MLX
 
 struct ContentView: View {
     @StateObject private var viewModel = TTSViewModel()
+    @State private var selectedTab = 0
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                if viewModel.modelLoaded {
-                    ttsInterface
-                } else if viewModel.isLoadingModel {
+        Group {
+            if viewModel.modelLoaded {
+                mainTabView
+            } else if viewModel.isLoadingModel {
+                NavigationStack {
                     loadingView
-                } else {
+                        .navigationTitle("Voxtral TTS")
+                        #if os(iOS)
+                        .navigationBarTitleDisplayMode(.inline)
+                        #endif
+                }
+            } else {
+                NavigationStack {
                     modelSetupView
+                        .navigationTitle("Voxtral TTS")
+                        #if os(iOS)
+                        .navigationBarTitleDisplayMode(.inline)
+                        #endif
                 }
             }
-            .padding()
-            .navigationTitle("Voxtral TTS")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+        }
+        .sheet(isPresented: $viewModel.showingAPIKeySettings) {
+            apiKeySettingsSheet
+        }
+    }
+
+    // MARK: - Tab View (after model loaded)
+
+    private var mainTabView: some View {
+        TabView(selection: $selectedTab) {
+            // Tab 1: Generate
+            NavigationStack {
+                ScrollView {
+                    ttsInterface
+                        .padding()
+                }
+                .navigationTitle("Generate")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .automatic) {
+                        Menu {
+                            Button(action: { viewModel.showingAPIKeySettings = true }) {
+                                Label("API Key Settings", systemImage: "key")
+                            }
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                    }
+                }
+            }
+            .tabItem {
+                Label("Generate", systemImage: "waveform")
+            }
+            .tag(0)
+
+            // Tab 2: Clone Voice
+            NavigationStack {
+                if let modelPath = viewModel.modelPath {
+                    VoiceCloneView(
+                        modelPath: modelPath,
+                        onVoiceCreated: { name in
+                            viewModel.onVoiceCreated(name)
+                            selectedTab = 0  // Switch to Generate tab
+                        }
+                    )
+                    .navigationTitle("Clone Voice")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                }
+            }
+            .tabItem {
+                Label("Clone Voice", systemImage: "person.wave.2")
+            }
+            .tag(1)
         }
     }
 
@@ -64,6 +127,7 @@ struct ContentView: View {
                     .truncationMode(.middle)
             }
         }
+        .padding()
         .fileImporter(
             isPresented: $viewModel.showingDirectoryPicker,
             allowedContentTypes: [.folder],
@@ -94,23 +158,12 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - TTS Interface
+    // MARK: - TTS Interface (Generate tab content)
 
     private var ttsInterface: some View {
         VStack(spacing: 16) {
             // Voice picker
-            HStack {
-                Text("Voice:")
-                    .font(.subheadline)
-                Picker("Voice", selection: $viewModel.selectedVoice) {
-                    Text("None").tag("")
-                    ForEach(viewModel.availableVoices, id: \.self) { voice in
-                        Text(voice).tag(voice)
-                    }
-                }
-                .pickerStyle(.menu)
-                Spacer()
-            }
+            voicePickerSection
 
             // Text input
             TextEditor(text: $viewModel.inputText)
@@ -128,13 +181,24 @@ struct ContentView: View {
                     }
                 }
 
+            // API indicator for cloned voices
+            if viewModel.isCustomVoiceSelected {
+                HStack(spacing: 4) {
+                    Image(systemName: "cloud")
+                        .font(.caption2)
+                    Text("This voice uses the Mistral API for generation")
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+            }
+
             // Generate button
             Button(action: { viewModel.generate() }) {
                 HStack {
                     if viewModel.isGenerating {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Generating...")
+                        Text(viewModel.isCustomVoiceSelected ? "Generating (API)..." : "Generating...")
                     } else {
                         Image(systemName: "waveform")
                         Text("Generate Audio")
@@ -148,17 +212,32 @@ struct ContentView: View {
             // Progress + Cancel
             if viewModel.isGenerating {
                 VStack(spacing: 4) {
-                    ProgressView(value: viewModel.generationProgress)
-                    HStack {
-                        Text("Frame \(viewModel.currentFrame) / \(viewModel.maxFrames)")
+                    if !viewModel.isCustomVoiceSelected {
+                        ProgressView(value: viewModel.generationProgress)
+                        HStack {
+                            Text("Frame \(viewModel.currentFrame) / \(viewModel.maxFrames)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Cancel") {
+                                viewModel.cancelGeneration()
+                            }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Cancel") {
-                            viewModel.cancelGeneration()
+                            .foregroundStyle(.red)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    } else {
+                        ProgressView()
+                        HStack {
+                            Text("Waiting for API response...")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Cancel") {
+                                viewModel.cancelGeneration()
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        }
                     }
                 }
             }
@@ -180,8 +259,50 @@ struct ContentView: View {
             if let stats = viewModel.generationStats {
                 statsView(stats)
             }
+        }
+    }
+
+    // MARK: - Voice Picker
+
+    private var voicePickerSection: some View {
+        HStack {
+            Text("Voice:")
+                .font(.subheadline)
+
+            Picker("Voice", selection: $viewModel.selectedVoice) {
+                Text("None").tag("")
+
+                if !viewModel.presetVoices.isEmpty {
+                    Section("Preset Voices") {
+                        ForEach(viewModel.presetVoices, id: \.self) { voice in
+                            Text(voice).tag(voice)
+                        }
+                    }
+                }
+
+                if !viewModel.customVoices.isEmpty {
+                    Section("Cloned Voices") {
+                        ForEach(viewModel.customVoices, id: \.self) { voice in
+                            Label(voice, systemImage: "person.wave.2")
+                                .tag(voice)
+                        }
+                    }
+                }
+            }
+            .pickerStyle(.menu)
 
             Spacer()
+
+            // Delete custom voice
+            if !viewModel.selectedVoice.isEmpty,
+               viewModel.isCustomVoiceSelected {
+                Button(action: { viewModel.deleteCustomVoice(viewModel.selectedVoice) }) {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                }
+                .foregroundStyle(.red)
+                .help("Delete this custom voice")
+            }
         }
     }
 
@@ -254,6 +375,52 @@ struct ContentView: View {
         VStack(spacing: 2) {
             Text(value).fontWeight(.medium)
             Text(label).foregroundStyle(.tertiary)
+        }
+    }
+
+    // MARK: - API Key Settings Sheet
+
+    private var apiKeySettingsSheet: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Mistral API Key")
+                        .font(.headline)
+                    Text("Required for cloned voice generation. Get a free key (no credit card) at console.mistral.ai.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
+                    SecureField("API Key", text: Binding(
+                        get: { viewModel.apiKey },
+                        set: { viewModel.apiKey = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .autocorrectionDisabled()
+                }
+
+                if viewModel.apiKey.isEmpty {
+                    Text("Preset voices work without an API key (on-device generation).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Settings")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        viewModel.showingAPIKeySettings = false
+                    }
+                }
+            }
         }
     }
 }

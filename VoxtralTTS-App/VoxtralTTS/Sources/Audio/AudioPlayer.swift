@@ -127,6 +127,35 @@ class AudioPlayer: ObservableObject {
         }
     }
 
+    // MARK: - Load from Buffer
+
+    /// Load audio from a PCM buffer directly (for preview playback).
+    func loadAudio(buffer: AVAudioPCMBuffer) {
+        stop()
+        let count = Int(buffer.frameLength)
+        let sRate = buffer.format.sampleRate
+
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sRate,
+            channels: 1,
+            interleaved: false
+        )!
+
+        guard let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else { return }
+        pcm.frameLength = AVAudioFrameCount(count)
+
+        let src = buffer.floatChannelData![0]
+        let dst = pcm.floatChannelData![0]
+        memcpy(dst, src, count * MemoryLayout<Float>.size)
+
+        self.audioBuffer = pcm
+        self.duration = Double(count) / sRate
+        DispatchQueue.main.async {
+            self.currentTime = 0
+        }
+    }
+
     // MARK: - Save to File
 
     func saveToFile(url: URL) throws {

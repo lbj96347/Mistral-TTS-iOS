@@ -3,32 +3,43 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		0506F23E03111918618E42B5 /* GenerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AC24A7168B711BB1CA785A /* GenerationTests.swift */; };
 		07DEAE1078A65E860DF91532 /* AcousticTransformer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */; };
 		0DE9623EA43E999E1E019E0D /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = 9E2CB5B90B55A0F4F47E00E4 /* MLXNN */; };
+		1CE274083B9BA66A5DC93AB5 /* MistralAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13286EE2AC26C2C7ACF3D0C1 /* MistralAPIClient.swift */; };
 		20E8716F68F5F5A7E56550DE /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = BB184364F623BDD4AC8FA1EC /* MLXFast */; };
 		27400A7D2369AB747A9892F0 /* AcousticTransformer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */; };
 		27CD70FEC268DBEBFED4F5A4 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = CE8350BDF21E06B78A063D1A /* Transformers */; };
+		2C2319D6FEB9192D73942F24 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1A592DD46A00068B2B2145 /* ActivityView.swift */; };
 		320374C74705929DA51D87A1 /* VoxtralTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */; };
 		3217DFE8679E22A9B5531B7A /* ModelLoadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43ED34E268D9F27366F59ACE /* ModelLoadingTests.swift */; };
+		32F150E4C1ED0DDD613E3D61 /* AudioPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C042455AE479C4AC4532467 /* AudioPreprocessor.swift */; };
 		3555DFF388FECF39232F7A5E /* VoxtralModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */; };
+		3E752078EFF89FD78349BE31 /* VoiceEmbeddingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668BCFB71862F75F6D8C7F3A /* VoiceEmbeddingStore.swift */; };
 		3F04A41686AF04FD50217466 /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 263BE8632366C3D85DEF66FD /* TTSViewModel.swift */; };
 		4344E90637812F02CA700113 /* VoxtralModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */; };
+		45F66A805C2C4782D1B05806 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE73B07A0F46769EF8CCBF62 /* AudioRecorder.swift */; };
 		46E6BD510DDA5ACE726B2DC4 /* TransformerDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */; };
+		47DC4BA5B726F6C13E12A5DC /* VoiceCloneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B4E9659C10F5AC14EA4686 /* VoiceCloneView.swift */; };
+		4C35D9D94A0646EFC123E299 /* MistralAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13286EE2AC26C2C7ACF3D0C1 /* MistralAPIClient.swift */; };
 		515A547C1D517284D388F65C /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = 1D0472135DFCA973A3B5193B /* MLXNN */; };
 		53F5C871AD486258F265CEC8 /* ModelConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DB179F3581788C00E152C /* ModelConfig.swift */; };
 		550A40A6B69746A0DC532DC3 /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = 8FCBFB5A86A048498E9EC174 /* MLXRandom */; };
 		5697C174FC0BE7DF84890831 /* AudioPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE003B0E5FFD3F5A9B903E3 /* AudioPlayerTests.swift */; };
 		56C1DBB1B493F10C666D80D8 /* VoxtralModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */; };
+		59CBB47376A6FBDFE425F10D /* VoiceEmbeddingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668BCFB71862F75F6D8C7F3A /* VoiceEmbeddingStore.swift */; };
 		76815FD0F2C13CF40DCA3DAF /* VoxtralTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */; };
+		7C6F271E3AD38802706758B6 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1A592DD46A00068B2B2145 /* ActivityView.swift */; };
 		7D062B2C1F54E0B618557265 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 61184A4D92628DC2196F1D45 /* MLX */; };
 		7D730BE07D751065E555815F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F321BA304B97C38F813A9015 /* ContentView.swift */; };
+		7EE1B1911CCF140A4E05B630 /* MistralAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13286EE2AC26C2C7ACF3D0C1 /* MistralAPIClient.swift */; };
 		8240DAA1A8FDA7C13E1A6346 /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = 725CACE4E1AC2C3B49839DDB /* MLXFast */; };
 		89277B852A76D54B7519B609 /* TransformerDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */; };
+		8B2B7202B6AC6232CEAE748B /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE73B07A0F46769EF8CCBF62 /* AudioRecorder.swift */; };
 		8CADADD07924DB23C60B20AF /* TransformerDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */; };
 		8E76EAD5288DF18B0012F44F /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 1CF1BC95EC4E995A96A6A2DB /* MLX */; };
 		904152CD49A2CEEA2A922F17 /* VoxtralCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */; };
@@ -37,6 +48,8 @@
 		9A1780E9A79B6B7B07A7BD47 /* AcousticTransformer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */; };
 		9A9901CE1DE88DA562637713 /* ModelConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2DB179F3581788C00E152C /* ModelConfig.swift */; };
 		9C7D9AD18DBB770E47ACC1E9 /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = 9646EA4E47E36CA4BD300A40 /* MLXRandom */; };
+		A1749B52C73AC9F221749051 /* VoiceCloneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B4E9659C10F5AC14EA4686 /* VoiceCloneView.swift */; };
+		A282143AB848B4C3EB7C7559 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1A592DD46A00068B2B2145 /* ActivityView.swift */; };
 		A8AA37110B3F364A04230FC0 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
 		B1E1B97938EF80458CB169A7 /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = 81A37C52DA0679381D82AD14 /* MLXFast */; };
 		B4329CC6425076E78D10AAF4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F321BA304B97C38F813A9015 /* ContentView.swift */; };
@@ -46,40 +59,48 @@
 		C1FFEA7C75377EB9B195B061 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = FAD636D6CF881FD47CFA4A9D /* Transformers */; };
 		C2162D5D91DA50B4B061CBDA /* VoxtralTTSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4ACC51DB12CE198B41B63C6 /* VoxtralTTSApp.swift */; };
 		CBC3A7DB542A007B5BF6D4FE /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 263BE8632366C3D85DEF66FD /* TTSViewModel.swift */; };
+		CEED5AACB44BDC863CA79136 /* AudioPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C042455AE479C4AC4532467 /* AudioPreprocessor.swift */; };
 		D1CEB222F4F89E58E6F0ED51 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F321BA304B97C38F813A9015 /* ContentView.swift */; };
 		D3DBD6870E414157D283D9ED /* TokenizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F246CA6A4A84DA800256F8AF /* TokenizerTests.swift */; };
 		D9A7238486CC567E63FACDF0 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = 51C20A1688FEC8C7274E5409 /* Transformers */; };
 		D9AB5232D20C483A5FAAD37E /* VoxtralTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */; };
+		DB4C4A2E811038D97C50F2D0 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE73B07A0F46769EF8CCBF62 /* AudioRecorder.swift */; };
 		E5D771FD1F76E643D48636C1 /* MLXRandom in Frameworks */ = {isa = PBXBuildFile; productRef = E79FA27C0F08401DDDDB9A67 /* MLXRandom */; };
 		E8234CD74E450AC00FEEFBA6 /* VoxtralCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */; };
 		E86A29AAC87E2470B2A3535F /* TTSViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 263BE8632366C3D85DEF66FD /* TTSViewModel.swift */; };
 		F01BDD0B950E1E07642E134F /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
 		F2785F37BF9AF1CA4E48ED18 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */; };
+		F6EEB8683850AFE06CB96F85 /* VoiceCloneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79B4E9659C10F5AC14EA4686 /* VoiceCloneView.swift */; };
 		F8F5EB474FF9C1348AC0BFB2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */; };
-		D4E5F60718293A4B5CA1B2C3 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */; };
-		E5F60718293A4B5CA1B2C3D4 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */; };
+		FD346F9B01D7EC638AF5BD75 /* AudioPreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C042455AE479C4AC4532467 /* AudioPreprocessor.swift */; };
+		FDCCD796C288AED8D8482EA5 /* VoiceEmbeddingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668BCFB71862F75F6D8C7F3A /* VoiceEmbeddingStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		13286EE2AC26C2C7ACF3D0C1 /* MistralAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistralAPIClient.swift; sourceTree = "<group>"; };
 		1C362CCBE0426674ABAA1A68 /* TransformerDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformerDecoder.swift; sourceTree = "<group>"; };
 		263BE8632366C3D85DEF66FD /* TTSViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSViewModel.swift; sourceTree = "<group>"; };
 		43ED34E268D9F27366F59ACE /* ModelLoadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelLoadingTests.swift; sourceTree = "<group>"; };
 		4DE8A0ED6CD7048FCDE87DF5 /* VoxtralTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralTokenizer.swift; sourceTree = "<group>"; };
+		4E1A592DD46A00068B2B2145 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		5A2DB179F3581788C00E152C /* ModelConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfig.swift; sourceTree = "<group>"; };
+		668BCFB71862F75F6D8C7F3A /* VoiceEmbeddingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceEmbeddingStore.swift; sourceTree = "<group>"; };
+		79B4E9659C10F5AC14EA4686 /* VoiceCloneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCloneView.swift; sourceTree = "<group>"; };
 		7B1ABA7A7092A79EA6440C8E /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
-		7E8E3F5F5F4D8330514AF4A9 /* VoxtralTTS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E8E3F5F5F4D8330514AF4A9 /* VoxtralTTS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8EE003B0E5FFD3F5A9B903E3 /* AudioPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerTests.swift; sourceTree = "<group>"; };
 		8F0F2E6F930484310E4895EA /* AcousticTransformer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcousticTransformer.swift; sourceTree = "<group>"; };
+		9C042455AE479C4AC4532467 /* AudioPreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreprocessor.swift; sourceTree = "<group>"; };
 		AA527A54C09D65B97E3AFBA8 /* VoxtralModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralModel.swift; sourceTree = "<group>"; };
 		B626AC1C3B8B851A5962D325 /* VoxtralTTSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoxtralTTSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		C005A1F2BA8C5409BF4A562C /* VoxtralCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralCodec.swift; sourceTree = "<group>"; };
+		CE73B07A0F46769EF8CCBF62 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		E305F946F54B6DB6361939FE /* VoxtralTTS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoxtralTTS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0AC24A7168B711BB1CA785A /* GenerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationTests.swift; sourceTree = "<group>"; };
 		F246CA6A4A84DA800256F8AF /* TokenizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenizerTests.swift; sourceTree = "<group>"; };
 		F321BA304B97C38F813A9015 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F4ACC51DB12CE198B41B63C6 /* VoxtralTTSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralTTSApp.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,9 +146,10 @@
 		3574C718F68EF3CB3DA35BF3 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				A1B2C3D4E5F60718293A4B5C /* ActivityView.swift */,
+				4E1A592DD46A00068B2B2145 /* ActivityView.swift */,
 				F321BA304B97C38F813A9015 /* ContentView.swift */,
 				263BE8632366C3D85DEF66FD /* TTSViewModel.swift */,
+				79B4E9659C10F5AC14EA4686 /* VoiceCloneView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -200,6 +222,10 @@
 			isa = PBXGroup;
 			children = (
 				BED810DCAF8BCC35D62957B1 /* AudioPlayer.swift */,
+				9C042455AE479C4AC4532467 /* AudioPreprocessor.swift */,
+				CE73B07A0F46769EF8CCBF62 /* AudioRecorder.swift */,
+				13286EE2AC26C2C7ACF3D0C1 /* MistralAPIClient.swift */,
+				668BCFB71862F75F6D8C7F3A /* VoiceEmbeddingStore.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -315,6 +341,7 @@
 				C7173E0CD3C1CD52EF844410 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				58D7FF7F631D3070C93DE297 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -330,13 +357,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D4E5F60718293A4B5CA1B2C3 /* ActivityView.swift in Sources */,
 				9A1780E9A79B6B7B07A7BD47 /* AcousticTransformer.swift in Sources */,
+				A282143AB848B4C3EB7C7559 /* ActivityView.swift in Sources */,
 				A8AA37110B3F364A04230FC0 /* AudioPlayer.swift in Sources */,
+				CEED5AACB44BDC863CA79136 /* AudioPreprocessor.swift in Sources */,
+				45F66A805C2C4782D1B05806 /* AudioRecorder.swift in Sources */,
 				D1CEB222F4F89E58E6F0ED51 /* ContentView.swift in Sources */,
+				4C35D9D94A0646EFC123E299 /* MistralAPIClient.swift in Sources */,
 				53F5C871AD486258F265CEC8 /* ModelConfig.swift in Sources */,
 				3F04A41686AF04FD50217466 /* TTSViewModel.swift in Sources */,
 				89277B852A76D54B7519B609 /* TransformerDecoder.swift in Sources */,
+				F6EEB8683850AFE06CB96F85 /* VoiceCloneView.swift in Sources */,
+				59CBB47376A6FBDFE425F10D /* VoiceEmbeddingStore.swift in Sources */,
 				B99110296E5AFFB9F0970C9F /* VoxtralCodec.swift in Sources */,
 				3555DFF388FECF39232F7A5E /* VoxtralModel.swift in Sources */,
 				C2162D5D91DA50B4B061CBDA /* VoxtralTTSApp.swift in Sources */,
@@ -349,16 +381,22 @@
 			buildActionMask = 2147483647;
 			files = (
 				27400A7D2369AB747A9892F0 /* AcousticTransformer.swift in Sources */,
+				2C2319D6FEB9192D73942F24 /* ActivityView.swift in Sources */,
 				F8F5EB474FF9C1348AC0BFB2 /* AudioPlayer.swift in Sources */,
 				5697C174FC0BE7DF84890831 /* AudioPlayerTests.swift in Sources */,
+				FD346F9B01D7EC638AF5BD75 /* AudioPreprocessor.swift in Sources */,
+				8B2B7202B6AC6232CEAE748B /* AudioRecorder.swift in Sources */,
 				B4329CC6425076E78D10AAF4 /* ContentView.swift in Sources */,
 				0506F23E03111918618E42B5 /* GenerationTests.swift in Sources */,
+				7EE1B1911CCF140A4E05B630 /* MistralAPIClient.swift in Sources */,
 				929F3171C8967B3037A58949 /* ModelConfig.swift in Sources */,
 				3217DFE8679E22A9B5531B7A /* ModelLoadingTests.swift in Sources */,
 				E86A29AAC87E2470B2A3535F /* TTSViewModel.swift in Sources */,
 				F2785F37BF9AF1CA4E48ED18 /* TestHelpers.swift in Sources */,
 				D3DBD6870E414157D283D9ED /* TokenizerTests.swift in Sources */,
 				8CADADD07924DB23C60B20AF /* TransformerDecoder.swift in Sources */,
+				A1749B52C73AC9F221749051 /* VoiceCloneView.swift in Sources */,
+				FDCCD796C288AED8D8482EA5 /* VoiceEmbeddingStore.swift in Sources */,
 				904152CD49A2CEEA2A922F17 /* VoxtralCodec.swift in Sources */,
 				4344E90637812F02CA700113 /* VoxtralModel.swift in Sources */,
 				D9AB5232D20C483A5FAAD37E /* VoxtralTokenizer.swift in Sources */,
@@ -369,13 +407,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E5F60718293A4B5CA1B2C3D4 /* ActivityView.swift in Sources */,
 				07DEAE1078A65E860DF91532 /* AcousticTransformer.swift in Sources */,
+				7C6F271E3AD38802706758B6 /* ActivityView.swift in Sources */,
 				F01BDD0B950E1E07642E134F /* AudioPlayer.swift in Sources */,
+				32F150E4C1ED0DDD613E3D61 /* AudioPreprocessor.swift in Sources */,
+				DB4C4A2E811038D97C50F2D0 /* AudioRecorder.swift in Sources */,
 				7D730BE07D751065E555815F /* ContentView.swift in Sources */,
+				1CE274083B9BA66A5DC93AB5 /* MistralAPIClient.swift in Sources */,
 				9A9901CE1DE88DA562637713 /* ModelConfig.swift in Sources */,
 				CBC3A7DB542A007B5BF6D4FE /* TTSViewModel.swift in Sources */,
 				46E6BD510DDA5ACE726B2DC4 /* TransformerDecoder.swift in Sources */,
+				47DC4BA5B726F6C13E12A5DC /* VoiceCloneView.swift in Sources */,
+				3E752078EFF89FD78349BE31 /* VoiceEmbeddingStore.swift in Sources */,
 				E8234CD74E450AC00FEEFBA6 /* VoxtralCodec.swift in Sources */,
 				56C1DBB1B493F10C666D80D8 /* VoxtralModel.swift in Sources */,
 				BB9E64EFB6AD105948F56F19 /* VoxtralTTSApp.swift in Sources */,
@@ -534,7 +577,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5G88BPG37C;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VoxtralTTS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -560,7 +602,6 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5G88BPG37C;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VoxtralTTS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

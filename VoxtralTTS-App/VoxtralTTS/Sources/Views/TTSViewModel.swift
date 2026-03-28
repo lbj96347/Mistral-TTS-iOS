@@ -22,11 +22,14 @@ class TTSViewModel: ObservableObject {
     @Published var currentChunk = 0
     @Published var totalChunks = 1
 
+    // Voice cloning
+    @Published var showingAPIKeySettings = false
+
     // Model
     private var model: VoxtralTTSModel?
     private var tokenizer: VoxtralTokenizer?
     private var modelConfig: ModelConfig?
-    private var modelPath: URL?
+    private(set) var modelPath: URL?
     private var securityScopedURL: URL?  // Keep security-scoped access alive on iOS
 
     // Generation task (for cancellation)
@@ -46,6 +49,12 @@ class TTSViewModel: ObservableObject {
 
     // Persistence
     private let modelBookmarkKey = "VoxtralTTS.modelBookmark"
+    private let apiKeyKey = "VoxtralTTS.mistralAPIKey"
+
+    var apiKey: String {
+        get { UserDefaults.standard.string(forKey: apiKeyKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: apiKeyKey) }
+    }
 
     var lastModelPath: String? {
         // Resolve bookmark to get display path
@@ -77,21 +86,41 @@ class TTSViewModel: ObservableObject {
     }
 
     @Published var cachedVoices: [String] = []
+    @Published var cachedCustomVoices: [String] = []
 
     var availableVoices: [String] {
         cachedVoices
     }
 
-    private func loadAvailableVoices(from path: URL) -> [String] {
-        let voiceDir = path.appendingPathComponent("voice_embedding")
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: voiceDir, includingPropertiesForKeys: nil
-        ) else { return [] }
+    /// Preset voices with on-device embeddings (.safetensors)
+    var presetVoices: [String] {
+        cachedVoices.filter { !cachedCustomVoices.contains($0) }
+    }
 
-        return files
-            .filter { $0.pathExtension == "safetensors" }
-            .map { $0.deletingPathExtension().lastPathComponent }
-            .sorted()
+    /// Custom cloned voices (.wav reference audio)
+    var customVoices: [String] {
+        cachedCustomVoices
+    }
+
+    /// Whether the selected voice is a custom cloned voice (requires API)
+    var isCustomVoiceSelected: Bool {
+        guard !selectedVoice.isEmpty, let path = modelPath else { return false }
+        return cachedCustomVoices.contains(selectedVoice)
+            && !VoiceEmbeddingStore.hasEmbedding(name: selectedVoice, in: path)
+    }
+
+    private func loadAvailableVoices(from path: URL) -> [String] {
+        VoiceEmbeddingStore.listAll(in: path)
+    }
+
+    private func loadCustomVoices(from path: URL) -> [String] {
+        VoiceEmbeddingStore.listCustom(in: path)
+    }
+
+    func refreshVoices() {
+        guard let path = modelPath else { return }
+        cachedVoices = loadAvailableVoices(from: path)
+        cachedCustomVoices = loadCustomVoices(from: path)
     }
 
     var playbackProgress: Double {
@@ -155,7 +184,8 @@ class TTSViewModel: ObservableObject {
 
                 // Cache voice list while we have access
                 let voices = self.loadAvailableVoices(from: url)
-                print("[TTS] Found \(voices.count) voice(s): \(voices)")
+                let custom = self.loadCustomVoices(from: url)
+                print("[TTS] Found \(voices.count) voice(s): \(voices), \(custom.count) custom")
 
                 let totalElapsed = CFAbsoluteTimeGetCurrent() - startTime
                 print("[TTS] ✅ Total load time: \(String(format: "%.2f", totalElapsed))s")
@@ -166,6 +196,7 @@ class TTSViewModel: ObservableObject {
                     self.modelConfig = config
                     self.modelPath = url
                     self.cachedVoices = voices
+                    self.cachedCustomVoices = custom
                     self.modelLoaded = true
                     self.isLoadingModel = false
 
@@ -203,9 +234,97 @@ class TTSViewModel: ObservableObject {
         generationTask?.cancel()
     }
 
+    // MARK: - Voice Management
+
+    func onVoiceCreated(_ name: String) {
+        refreshVoices()
+        selectedVoice = name
+    }
+
+    func deleteCustomVoice(_ name: String) {
+        guard let path = modelPath else { return }
+        try? VoiceEmbeddingStore.delete(name: name, from: path)
+        if selectedVoice == name {
+            selectedVoice = ""
+        }
+        refreshVoices()
+    }
+
     // MARK: - Generation
 
     func generate() {
+        guard !inputText.isEmpty else { return }
+
+        // Route to API generation for custom cloned voices
+        if isCustomVoiceSelected {
+            generateWithAPI()
+            return
+        }
+
+        generateOnDevice()
+    }
+
+    /// API-based generation for custom cloned voices
+    private func generateWithAPI() {
+        guard let modelPath = modelPath else { return }
+        guard !apiKey.isEmpty else {
+            showingAPIKeySettings = true
+            errorMessage = "API key required for cloned voices."
+            return
+        }
+
+        guard let refAudioData = VoiceEmbeddingStore.loadCustomVoiceWAV(
+            name: selectedVoice, from: modelPath
+        ) else {
+            errorMessage = "Reference audio not found for voice '\(selectedVoice)'."
+            return
+        }
+
+        isGenerating = true
+        errorMessage = nil
+        generationProgress = 0
+        generationStats = nil
+
+        generationTask = Task { [weak self, inputText, apiKey] in
+            guard let self = self else { return }
+            let startTime = CFAbsoluteTimeGetCurrent()
+
+            do {
+                let client = MistralAPIClient(apiKey: apiKey)
+                let audioBuffer = try await client.generateWithVoiceClone(
+                    text: inputText,
+                    referenceAudioData: refAudioData
+                )
+
+                let elapsed = Float(CFAbsoluteTimeGetCurrent() - startTime)
+                let samples = Int(audioBuffer.frameLength)
+                let audioDurationSec = Float(samples) / Float(audioBuffer.format.sampleRate)
+                let rtf = audioDurationSec / elapsed
+
+                let hours = Int(audioDurationSec / 3600)
+                let mins = Int((audioDurationSec.truncatingRemainder(dividingBy: 3600)) / 60)
+                let secs = Int(audioDurationSec.truncatingRemainder(dividingBy: 60))
+                let ms = Int((audioDurationSec.truncatingRemainder(dividingBy: 1)) * 1000)
+
+                self.audioPlayer.loadAudio(buffer: audioBuffer)
+                self.hasAudio = true
+                self.generationStats = GenerationStats(
+                    audioDuration: String(format: "%02d:%02d:%02d.%03d", hours, mins, secs, ms),
+                    realTimeFactor: rtf,
+                    tokenCount: inputText.count,
+                    processingTime: elapsed
+                )
+                self.audioPlayer.play()
+            } catch {
+                self.errorMessage = "API generation failed: \(error.localizedDescription)"
+            }
+
+            self.isGenerating = false
+        }
+    }
+
+    /// On-device generation for preset voices
+    private func generateOnDevice() {
         guard let model = model, let tokenizer = tokenizer else { return }
         guard !inputText.isEmpty else { return }
 
