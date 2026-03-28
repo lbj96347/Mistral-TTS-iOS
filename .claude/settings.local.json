@@ -11,7 +11,8 @@
       "Bash(find /Users/CashMacbook/Documents/project/Mistral-TTS-iOS/VoxtralTTS-App -name \"*.swift\" -exec wc -l {} +)",
       "Bash(python3 -c \"import json; t=json.load\\(open\\(''''/Users/CashMacbook/Documents/project/Mistral-TTS-iOS/mlx_model_q4/tokenizer.json''''\\)\\); print\\(type\\(t\\)\\); print\\(list\\(t.keys\\(\\)\\)[:10]\\)\")",
       "Bash(python3:*)",
-      "Bash(curl -s -L --max-time 30 \"https://mistral.ai/news/voxtral-tts\")"
+      "Bash(curl -s -L --max-time 30 \"https://mistral.ai/news/voxtral-tts\")",
+      "Bash(xcodebuild test:*)"
     ]
   }
 }

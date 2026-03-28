@@ -18,7 +18,7 @@ final class GenerationTests: XCTestCase {
     // MARK: - Helper
 
     private func tokenize(_ text: String) -> [Int32] {
-        return tokenizer.encode(text).map { Int32($0) }
+        return tokenizer.encode(text, addSpecialTokens: false).map { Int32($0) }
     }
 
     private func assertValidResult(
@@ -187,6 +187,95 @@ final class GenerationTests: XCTestCase {
         let durationSec = Float(floats.count) / 24000.0
         XCTAssertGreaterThan(durationSec, 0.1, "Audio too short: \(durationSec)s")
         XCTAssertLessThan(durationSec, 30.0, "Audio too long: \(durationSec)s")
+    }
+
+    // MARK: - Audio Output for Transcription Verification
+
+    func testGenerateAndSaveWAV() throws {
+        guard let url = TestFixtures.modelURL else {
+            throw XCTSkip("VOXTRAL_MODEL_PATH not set")
+        }
+
+        let text = "Hello, this is a test of the voice synthesis system."
+        let input = tokenize(text)
+
+        // Load voice embedding
+        let voiceDir = url.appendingPathComponent("voice_embedding")
+        var voiceEmb: MLXArray? = nil
+        let voicePath = voiceDir.appendingPathComponent("neutral_female.safetensors")
+        if FileManager.default.fileExists(atPath: voicePath.path) {
+            voiceEmb = model.loadVoiceEmbedding(from: voicePath)
+        }
+
+        let result = model.generate(
+            textTokenIds: input,
+            voiceEmbedding: voiceEmb,
+            maxAudioFrames: 200
+        )
+
+        guard let result = result else {
+            XCTFail("Generation returned nil")
+            return
+        }
+
+        let floats = result.audio.asType(.float32).asArray(Float.self)
+        XCTAssertFalse(floats.isEmpty, "Audio should have samples")
+
+        // Audio stats
+        let maxAmp = floats.map { abs($0) }.max() ?? 0
+        let mean = floats.reduce(0, +) / Float(floats.count)
+        print("Audio stats: samples=\(floats.count), max=\(maxAmp), mean=\(mean), duration=\(result.audioDuration)")
+        XCTAssertGreaterThan(maxAmp, 0.01, "Audio too quiet")
+
+        // Save as WAV to /tmp for transcription
+        let outputPath = NSString("~/Desktop/swift_tts_test.wav").expandingTildeInPath
+        var audioData = Data()
+        let sampleRate: UInt32 = 24000
+        let numSamples = UInt32(floats.count)
+        let dataSize = numSamples * 2  // 16-bit
+        let fileSize = 36 + dataSize
+
+        // WAV header
+        audioData.append(contentsOf: "RIFF".utf8)
+        audioData.append(contentsOf: withUnsafeBytes(of: fileSize.littleEndian) { Array($0) })
+        audioData.append(contentsOf: "WAVE".utf8)
+        audioData.append(contentsOf: "fmt ".utf8)
+        audioData.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
+        audioData.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // PCM
+        audioData.append(contentsOf: withUnsafeBytes(of: UInt16(1).littleEndian) { Array($0) })  // mono
+        audioData.append(contentsOf: withUnsafeBytes(of: sampleRate.littleEndian) { Array($0) })
+        audioData.append(contentsOf: withUnsafeBytes(of: (sampleRate * 2).littleEndian) { Array($0) })  // byte rate
+        audioData.append(contentsOf: withUnsafeBytes(of: UInt16(2).littleEndian) { Array($0) })  // block align
+        audioData.append(contentsOf: withUnsafeBytes(of: UInt16(16).littleEndian) { Array($0) })  // bits per sample
+        audioData.append(contentsOf: "data".utf8)
+        audioData.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
+
+        // Save raw codes for Python comparison
+        let codesPath = "/Users/CashMacbook/Desktop/swift_codes.json"
+        var semCodes: [Int] = []
+        var acouCodes: [[Int]] = []
+        // We need access to the codes - let's dump audio stats instead
+        // and save the raw float audio for analysis
+        let rawPath = "/Users/CashMacbook/Desktop/swift_raw_audio.bin"
+        var rawData = Data()
+        for f in floats {
+            var val = f
+            rawData.append(Data(bytes: &val, count: 4))
+        }
+        try rawData.write(to: URL(fileURLWithPath: rawPath))
+        print("Saved raw audio to: \(rawPath)")
+
+        // Normalize to [-1, 1] then write PCM samples
+        let normScale: Float = maxAmp > 1.0 ? (0.95 / maxAmp) : 1.0
+        print("Normalizing audio: maxAmp=\(maxAmp), scale=\(normScale)")
+        for sample in floats {
+            let normalized = sample * normScale
+            let int16 = Int16(max(-32767, min(32767, Int32(normalized * 32767.0))))
+            audioData.append(contentsOf: withUnsafeBytes(of: int16.littleEndian) { Array($0) })
+        }
+
+        try audioData.write(to: URL(fileURLWithPath: outputPath))
+        print("Saved WAV to: \(outputPath)")
     }
 
     // MARK: - Stats Consistency

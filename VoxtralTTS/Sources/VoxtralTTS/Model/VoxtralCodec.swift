@@ -6,20 +6,21 @@ import Foundation
 // MARK: - Codebook Components
 
 class SemanticCodebook: Module {
-    var embeddingSum: MLXArray
-    var clusterUsage: MLXArray
+    // Property names must match safetensors keys (snake_case)
+    var embedding_sum: MLXArray
+    var cluster_usage: MLXArray
     let codebookSize: Int
     let dim: Int
 
     init(codebookSize: Int, dim: Int) {
         self.codebookSize = codebookSize
         self.dim = dim
-        self.embeddingSum = MLXArray.zeros([codebookSize, dim])
-        self.clusterUsage = MLXArray.ones([codebookSize])
+        self.embedding_sum = MLXArray.zeros([codebookSize, dim])
+        self.cluster_usage = MLXArray.ones([codebookSize])
     }
 
     var embeddings: MLXArray {
-        embeddingSum / MLX.maximum(clusterUsage.expandedDimensions(axis: 1), MLXArray(1e-7))
+        embedding_sum / MLX.maximum(cluster_usage.expandedDimensions(axis: 1), MLXArray(1e-7))
     }
 
     func decode(_ codes: MLXArray) -> MLXArray {
@@ -103,8 +104,23 @@ class WeightNormedConvTranspose1d: Module {
     func getWeight() -> MLXArray {
         let g = parametrizations.weight.original0
         let v = parametrizations.weight.original1
-        let vNorm = MLX.sqrt(MLX.sum(v * v, axes: [1, 2], keepDims: true) + 1e-12)
-        return g * (v / vNorm)
+
+        if stride > 1 {
+            // ConvTranspose1d stride>1: converter applied Conv1d transpose to
+            // PyTorch [in, out, kernel], giving stored [in, kernel, out].
+            // Undo to get [in, out, kernel], normalize per in_ch,
+            // then transpose to MLX format [out, kernel, in].
+            let vOrig = v.transposed(0, 2, 1)  // [in, out, kernel]
+            // g: [in_ch, 1, 1], normalize over (out, kernel) per in_ch
+            let vNorm = MLX.sqrt(MLX.sum(vOrig * vOrig, axes: [1, 2], keepDims: true) + 1e-12)
+            let wOrig = g * (vOrig / vNorm)  // [in, out, kernel]
+            return wOrig.transposed(1, 2, 0)  // [out, kernel, in]
+        } else {
+            // Conv1d stride=1: stored correctly as [out, kernel, in]
+            // g: [out_ch, 1, 1], normalize over (kernel, in) per out_ch
+            let vNorm = MLX.sqrt(MLX.sum(v * v, axes: [1, 2], keepDims: true) + 1e-12)
+            return g * (v / vNorm)
+        }
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
@@ -275,8 +291,9 @@ class CodecTransformerBlock: Module {
     @ModuleInfo(key: "attention_norm") var attentionNorm: RMSNorm
     @ModuleInfo(key: "ffn_norm") var ffnNorm: RMSNorm
 
-    var attentionScale: MLXArray?
-    var ffnScale: MLXArray?
+    // Must match safetensors keys: attention_scale, ffn_scale
+    var attention_scale: MLXArray?
+    var ffn_scale: MLXArray?
     let useLayerScale: Bool
 
     init(config: AudioTokenizerConfig, slidingWindow: Int) {
@@ -292,20 +309,20 @@ class CodecTransformerBlock: Module {
         self._ffnNorm.wrappedValue = RMSNorm(dimensions: config.dim, eps: config.normEps)
 
         if config.layerScale {
-            self.attentionScale = MLXArray.ones([config.dim])
-            self.ffnScale = MLXArray.ones([config.dim])
+            self.attention_scale = MLXArray.ones([config.dim])
+            self.ffn_scale = MLXArray.ones([config.dim])
         }
     }
 
     func callAsFunction(_ x: MLXArray) -> MLXArray {
         var h = attention(attentionNorm(x))
-        if useLayerScale, let scale = attentionScale {
+        if useLayerScale, let scale = attention_scale {
             h = h * scale
         }
         var out = x + h
 
         h = feedForward(ffnNorm(out))
-        if useLayerScale, let scale = ffnScale {
+        if useLayerScale, let scale = ffn_scale {
             h = h * scale
         }
         out = out + h
@@ -380,20 +397,26 @@ class VoxtralCodec: Module {
         let totalCodebookDim = config.semanticDim + config.acousticDim  // 292
 
         var blocks: [Module] = []
-        var slidingWindow = config.attnSlidingWindowSize
+        // Decoder sliding window starts small and doubles upon upsampling.
+        // The encoder starts at attn_sliding_window_size (16) and halves upon downsampling,
+        // ending at 2. The decoder reverses this: starts at 2 and doubles to 16.
+        let nUpsampleStages = strides.filter { $0 > 1 }.count  // 3
+        var slidingWindow = max(1, config.attnSlidingWindowSize / (1 << nUpsampleStages))
 
         for stageIdx in 0 ..< strides.count {
             let inCh = stageIdx == 0 ? totalCodebookDim : config.dim
             blocks.append(DecoderConvBlock(
                 inChannels: inCh, outChannels: config.dim,
                 kernelSize: kernels[stageIdx], stride: strides[stageIdx]))
+
+            // Double sliding window AFTER upsampling conv, BEFORE transformer
+            if config.halfAttnWindowUponDownsampling && strides[stageIdx] > 1 {
+                slidingWindow = slidingWindow * 2
+            }
+
             blocks.append(DecoderTransformerBlock(
                 config: config, nLayers: nBlocksPerStage[stageIdx],
                 slidingWindow: slidingWindow))
-
-            if config.halfAttnWindowUponDownsampling && strides[stageIdx] > 1 {
-                slidingWindow = max(1, slidingWindow / 2)
-            }
         }
 
         self._decoderBlocks.wrappedValue = blocks

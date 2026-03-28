@@ -160,7 +160,7 @@ class TTSViewModel: ObservableObject {
 
             do {
                 // Tokenize text only (no BOS/EOS — prompt building adds control tokens)
-                let tokenIds = tokenizer.encode(inputText)
+                let tokenIds = tokenizer.encode(inputText, addSpecialTokens: false)
                 let textTokenIds = tokenIds.map { Int32($0) }
 
                 // Load voice embedding if selected

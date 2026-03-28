@@ -110,19 +110,22 @@ class VoxtralTTSModel: Module {
 
     // MARK: - Audio Frame Encoding
 
-    func encodeAudioFrame(semanticCode: MLXArray, acousticCodes: MLXArray) -> MLXArray {
+    func encodeAudioFrame(semanticCodeRaw: MLXArray, acousticCodes: MLXArray) -> MLXArray {
         let audioConfig = config.audioConfig
         let embTable = audioTokenEmbedding.embeddings
+        let nSpecial = 2  // EMPTY + END per codebook section
 
-        // Semantic embedding: first semanticCodebookSize entries
-        let semEmb = embTable(semanticCode)
+        // Semantic: raw code already includes +2 offset, indexes table directly
+        let semEmb = embTable(semanticCodeRaw)
 
-        // Acoustic embeddings: each codebook k starts at offset
-        let baseOffset = audioConfig.semanticCodebookSize
+        // Acoustic: each codebook section = codebook_size + n_special entries
+        // Table layout: [sem_section (8194)] [acou_0 (23)] [acou_1 (23)] ...
+        let semanticSectionSize = audioConfig.semanticCodebookSize + nSpecial  // 8194
+        let acousticStride = audioConfig.acousticCodebookSize + nSpecial       // 23
+
         var acouEmb = MLXArray.zeros(like: semEmb)
-
         for k in 0 ..< acousticCodes.dim(1) {
-            let kOffset = baseOffset + k * audioConfig.acousticCodebookSize
+            let kOffset = semanticSectionSize + k * acousticStride + nSpecial
             let kTokens = acousticCodes[0..., k] + kOffset
             acouEmb = acouEmb + embTable(kTokens)
         }
@@ -193,6 +196,13 @@ class VoxtralTTSModel: Module {
         var allAcousticCodes: [MLXArray] = []
         var pastSemanticCodes: [Int32] = []
 
+        // Precompute semantic logit mask: mask EMPTY(0) and padding (>= 8194)
+        let paddedSemanticSize = ((audioConfig.semanticCodebookSize + Int(AUDIO_CODE_OFFSET) + 127) / 128) * 128
+        let nValidSemantic = Int(AUDIO_CODE_OFFSET) + audioConfig.semanticCodebookSize  // 8194
+        var semanticMaskValues = [Float](repeating: -1e9, count: paddedSemanticSize)
+        for i in 1 ..< nValidSemantic { semanticMaskValues[i] = 0.0 }
+        let semanticMask = MLXArray(semanticMaskValues).reshaped(1, -1)
+
         for frameIdx in 0 ..< maxAudioFrames {
             if shouldCancel?() == true { break }
 
@@ -201,6 +211,9 @@ class VoxtralTTSModel: Module {
 
             // Predict semantic token using acoustic transformer's semantic head
             var semanticLogits = acousticTransformer.predictSemantic(llmHidden: lastHidden)  // [B, 8320]
+
+            // Mask invalid tokens: EMPTY(0) and padding (>= 8194)
+            semanticLogits = semanticLogits + semanticMask
 
             // Apply repetition penalty to semantic logits
             if repetitionPenalty != 1.0 && !pastSemanticCodes.isEmpty {
@@ -238,7 +251,7 @@ class VoxtralTTSModel: Module {
             allAcousticCodes.append(acouCode)
 
             // Encode audio frame back to embedding
-            let audioEmb = encodeAudioFrame(semanticCode: semCode, acousticCodes: acouCode)
+            let audioEmb = encodeAudioFrame(semanticCodeRaw: semCodeRaw, acousticCodes: acouCode)
             let audioEmbExpanded = audioEmb.expandedDimensions(axis: 1)
 
             // Feed back to LLM

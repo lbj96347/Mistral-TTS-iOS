@@ -37,12 +37,13 @@ class AudioPlayer: ObservableObject {
 
         buffer.frameLength = AVAudioFrameCount(count)
 
-        // Copy samples from MLX to buffer
+        // Copy samples from MLX to buffer, normalizing to [-1, 1]
         let channelData = buffer.floatChannelData![0]
-        // Read samples from MLX array
         let np = floatArray.asArray(Float.self)
+        let maxAmp = np.reduce(0) { max($0, abs($1)) }
+        let scale: Float = maxAmp > 1.0 ? (0.95 / maxAmp) : 1.0
         for i in 0 ..< count {
-            channelData[i] = np[i]
+            channelData[i] = np[i] * scale
         }
 
         self.audioBuffer = buffer
